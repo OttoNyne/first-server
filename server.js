@@ -30,7 +30,22 @@ app.get("/tasks", async (req, res) => {
   if (req.query.done !== undefined) {
     filter.done = req.query.done === "true";
   }
-  const tasks = await Task.find(filter);
+  const sort = req.query.sort || "-createdAt";
+
+  let page = parseInt(req.query.page);
+  if (!Number.isInteger(page) || page < 1) {
+    page = 1;
+  }
+
+  let limit = parseInt(req.query.limit);
+  if (!Number.isInteger(limit) || limit < 1) {
+    limit = 20;
+  }
+  limit = Math.min(limit, 100);
+
+  const skip = (page - 1) * limit;
+
+  const tasks = await Task.find(filter).sort(sort).limit(limit).skip(skip);
   res.json(tasks);
 });
 
