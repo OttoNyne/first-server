@@ -5,16 +5,34 @@ import { getAIProvider } from "../services/ai/index.js";
 export const aiRouter = Router();
 aiRouter.use(requireAuth);
 
+// Only errors deliberately thrown with a .status (e.g. Openverse being down)
+// are safe to show verbatim — anything else is an unexpected internal
+// exception (bad input, a bug) and must not leak raw Node/library error
+// text (stack internals, type-check messages, etc.) to the client.
+function handleAIError(err, res) {
+  if (err.status) {
+    return res.status(err.status).json({ error: err.message });
+  }
+  console.error(err);
+  res.status(500).json({ error: "Internal server error" });
+}
+
 aiRouter.post("/text", async (req, res) => {
+  if (!req.body.prompt || typeof req.body.prompt !== "string") {
+    return res.status(400).json({ error: "prompt is required" });
+  }
   try {
     const result = await getAIProvider().generateText({ prompt: req.body.prompt, kind: req.body.kind });
     res.json(result);
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    handleAIError(err, res);
   }
 });
 
 aiRouter.post("/image", async (req, res) => {
+  if (!req.body.prompt || typeof req.body.prompt !== "string") {
+    return res.status(400).json({ error: "prompt is required" });
+  }
   try {
     const result = await getAIProvider().generateImage({
       prompt: req.body.prompt,
@@ -23,7 +41,7 @@ aiRouter.post("/image", async (req, res) => {
     });
     res.json(result);
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    handleAIError(err, res);
   }
 });
 
@@ -32,6 +50,6 @@ aiRouter.get("/images/search", async (req, res) => {
     const results = await getAIProvider().searchImages(req.query.q || "");
     res.json({ results });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    handleAIError(err, res);
   }
 });

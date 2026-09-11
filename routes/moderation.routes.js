@@ -35,12 +35,17 @@ moderationRouter.delete("/users/:username/block", async (req, res) => {
   res.status(204).end();
 });
 
+const REPORT_TARGET_TYPES = ["user", "post", "comment", "profileComment"];
+
 moderationRouter.post("/reports", async (req, res) => {
-  const report = await Report.create({
-    reporter: req.user.id,
-    targetType: req.body.targetType,
-    targetId: req.body.targetId,
-    reason: req.body.reason,
-  });
+  const { targetType, targetId, reason } = req.body;
+  if (!REPORT_TARGET_TYPES.includes(targetType)) {
+    return res.status(400).json({ error: "Invalid targetType" });
+  }
+  if (!targetId || !reason) {
+    return res.status(400).json({ error: "targetId and reason are required" });
+  }
+
+  const report = await Report.create({ reporter: req.user.id, targetType, targetId, reason });
   res.status(201).json({ report });
 });
