@@ -37,7 +37,7 @@ authRouter.post("/register", async (req, res) => {
 
     const token = signAuthToken(user);
     setAuthCookie(res, token);
-    res.status(201).json({ user: toPublicUser(user) });
+    res.status(201).json({ user: await toPublicUser(user, user._id) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -63,7 +63,7 @@ authRouter.post("/login", async (req, res) => {
 
     const token = signAuthToken(user);
     setAuthCookie(res, token);
-    res.status(200).json({ user: toPublicUser(user) });
+    res.status(200).json({ user: await toPublicUser(user, user._id) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -81,7 +81,7 @@ authRouter.get("/me", requireAuth, async (req, res) => {
     if (!user) {
       return res.status(401).json({ error: "Not authenticated" });
     }
-    res.json({ user: toPublicUser(user) });
+    res.json({ user: await toPublicUser(user, req.user.id) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });

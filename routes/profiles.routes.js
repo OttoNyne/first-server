@@ -19,7 +19,7 @@ profilesRouter.get("/", requireAuth, async (req, res) => {
       { displayName: { $regex: search, $options: "i" } },
     ],
   }).limit(20);
-  res.json({ users: users.map(toPublicUser) });
+  res.json({ users: await Promise.all(users.map((u) => toPublicUser(u, req.user.id))) });
 });
 
 profilesRouter.patch("/me", requireAuth, async (req, res) => {
@@ -36,7 +36,7 @@ profilesRouter.patch("/me", requireAuth, async (req, res) => {
   if (theme !== undefined) user.theme = { ...(user.theme?.toObject?.() ?? user.theme ?? {}), ...theme };
 
   await user.save();
-  res.json({ user: toPublicUser(user) });
+  res.json({ user: await toPublicUser(user, req.user.id) });
 });
 
 profilesRouter.put("/me/top-friends", requireAuth, async (req, res) => {
@@ -69,7 +69,7 @@ profilesRouter.delete("/comments/:commentId", requireAuth, async (req, res) => {
 profilesRouter.get("/:username", attachUserIfPresent, async (req, res) => {
   try {
     const user = await getProfileForViewer(req.params.username, req.user?.id);
-    res.json({ user: toPublicUser(user) });
+    res.json({ user: await toPublicUser(user, req.user?.id) });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
@@ -79,7 +79,9 @@ profilesRouter.get("/:username/top-friends", attachUserIfPresent, async (req, re
   try {
     const user = await getProfileForViewer(req.params.username, req.user?.id);
     const topFriends = await TopFriend.find({ owner: user._id }).sort("position").populate("target");
-    res.json({ topFriends: topFriends.map((tf) => toPublicUser(tf.target)) });
+    res.json({
+      topFriends: await Promise.all(topFriends.map((tf) => toPublicUser(tf.target, req.user?.id))),
+    });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
@@ -91,7 +93,7 @@ profilesRouter.get("/:username/comments", attachUserIfPresent, async (req, res) 
     const comments = await ProfileComment.find({ profileOwner: user._id })
       .sort("-createdAt")
       .populate("author");
-    res.json({ comments: comments.map(toPublicComment) });
+    res.json({ comments: await Promise.all(comments.map((c) => toPublicComment(c, req.user?.id))) });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
@@ -117,7 +119,7 @@ profilesRouter.post("/:username/comments", requireAuth, async (req, res) => {
       payload: { commentId: comment._id, actorId: req.user.id },
     });
   }
-  res.status(201).json({ comment: toPublicComment(comment) });
+  res.status(201).json({ comment: await toPublicComment(comment, req.user.id) });
 });
 
 profilesRouter.get("/:username/tracks", attachUserIfPresent, async (req, res) => {

@@ -2,14 +2,14 @@ import { Router } from "express";
 import { Comment } from "../models/Comment.js";
 import { Post } from "../models/Post.js";
 import { Notification } from "../models/Notification.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { toPublicComment } from "../utils/serialize.js";
 
 export const commentsRouter = Router();
 
-commentsRouter.get("/posts/:postId/comments", async (req, res) => {
+commentsRouter.get("/posts/:postId/comments", attachUserIfPresent, async (req, res) => {
   const comments = await Comment.find({ post: req.params.postId }).sort("createdAt").populate("author");
-  res.json({ comments: comments.map(toPublicComment) });
+  res.json({ comments: await Promise.all(comments.map((c) => toPublicComment(c, req.user?.id))) });
 });
 
 commentsRouter.post("/posts/:postId/comments", requireAuth, async (req, res) => {
@@ -31,7 +31,7 @@ commentsRouter.post("/posts/:postId/comments", requireAuth, async (req, res) => 
     });
   }
 
-  res.status(201).json({ comment: toPublicComment(comment) });
+  res.status(201).json({ comment: await toPublicComment(comment, req.user.id) });
 });
 
 commentsRouter.delete("/comments/:id", requireAuth, async (req, res) => {

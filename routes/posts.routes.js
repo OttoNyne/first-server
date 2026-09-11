@@ -9,13 +9,13 @@ import { getProfileForViewer } from "../utils/visibility.js";
 export const postsRouter = Router();
 postsRouter.use(requireAuth);
 
-async function withCommentCounts(posts) {
+async function withCommentCounts(posts, viewerId) {
   const counts = await Comment.aggregate([
     { $match: { post: { $in: posts.map((p) => p._id) } } },
     { $group: { _id: "$post", count: { $sum: 1 } } },
   ]);
   const countMap = new Map(counts.map((c) => [String(c._id), c.count]));
-  return posts.map((p) => toPublicPost(p, countMap.get(String(p._id)) || 0));
+  return Promise.all(posts.map((p) => toPublicPost(p, countMap.get(String(p._id)) || 0, viewerId)));
 }
 
 postsRouter.get("/feed", async (req, res) => {
@@ -32,14 +32,14 @@ postsRouter.get("/feed", async (req, res) => {
     .limit(50)
     .populate("author");
 
-  res.json({ posts: await withCommentCounts(posts) });
+  res.json({ posts: await withCommentCounts(posts, req.user.id) });
 });
 
 postsRouter.get("/user/:username", async (req, res) => {
   try {
     const user = await getProfileForViewer(req.params.username, req.user.id);
     const posts = await Post.find({ author: user._id }).sort("-createdAt").populate("author");
-    res.json({ posts: await withCommentCounts(posts) });
+    res.json({ posts: await withCommentCounts(posts, req.user.id) });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
@@ -54,7 +54,7 @@ postsRouter.post("/", async (req, res) => {
     isAiImage: req.body.isAiImage || false,
   });
   await post.populate("author");
-  res.status(201).json({ post: toPublicPost(post, 0) });
+  res.status(201).json({ post: await toPublicPost(post, 0, req.user.id) });
 });
 
 postsRouter.delete("/:id", async (req, res) => {

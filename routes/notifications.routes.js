@@ -25,17 +25,21 @@ notificationsRouter.get("/", async (req, res) => {
   const friendshipMap = new Map(friendships.map((f) => [String(f._id), f.status]));
 
   res.json({
-    notifications: notifications.map((n) => ({
-      id: n._id,
-      recipientId: n.recipient,
-      type: n.type,
-      payload: n.payload,
-      actor: n.payload?.actorId ? toPublicUser(actorMap.get(String(n.payload.actorId))) : null,
-      friendshipStatus:
-        n.type === "friend_request" ? friendshipMap.get(String(n.payload?.friendshipId)) ?? null : undefined,
-      isRead: n.isRead,
-      createdAt: n.createdAt,
-    })),
+    notifications: await Promise.all(
+      notifications.map(async (n) => ({
+        id: n._id,
+        recipientId: n.recipient,
+        type: n.type,
+        payload: n.payload,
+        actor: n.payload?.actorId
+          ? await toPublicUser(actorMap.get(String(n.payload.actorId)), req.user.id)
+          : null,
+        friendshipStatus:
+          n.type === "friend_request" ? friendshipMap.get(String(n.payload?.friendshipId)) ?? null : undefined,
+        isRead: n.isRead,
+        createdAt: n.createdAt,
+      }))
+    ),
   });
 });
 

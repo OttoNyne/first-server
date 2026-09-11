@@ -20,7 +20,7 @@ friendsRouter.get("/", async (req, res) => {
   const friends = friendships.map((f) =>
     String(f.requester._id) === req.user.id ? f.addressee : f.requester
   );
-  res.json({ friends: friends.map(toPublicUser) });
+  res.json({ friends: await Promise.all(friends.map((f) => toPublicUser(f, req.user.id))) });
 });
 
 friendsRouter.get("/requests", async (req, res) => {
@@ -28,11 +28,13 @@ friendsRouter.get("/requests", async (req, res) => {
     "requester"
   );
   res.json({
-    requests: requests.map((r) => ({
-      id: r._id,
-      createdAt: r.createdAt,
-      requester: toPublicUser(r.requester),
-    })),
+    requests: await Promise.all(
+      requests.map(async (r) => ({
+        id: r._id,
+        createdAt: r.createdAt,
+        requester: await toPublicUser(r.requester, req.user.id),
+      }))
+    ),
   });
 });
 

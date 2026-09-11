@@ -76,10 +76,12 @@ groupsRouter.post("/:id/leave", async (req, res) => {
 groupsRouter.get("/:id/members", async (req, res) => {
   const members = await GroupMembership.find({ group: req.params.id }).populate("user");
   res.json({
-    members: members.map((m) => ({
-      role: m.role,
-      joinedAt: m.joinedAt,
-      user: toPublicUser(m.user),
-    })),
+    members: await Promise.all(
+      members.map(async (m) => ({
+        role: m.role,
+        joinedAt: m.joinedAt,
+        user: await toPublicUser(m.user, req.user.id),
+      }))
+    ),
   });
 });

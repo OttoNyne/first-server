@@ -56,4 +56,18 @@ userSchema.methods.toPublic = function () {
   };
 };
 
+// Minimal identity shape for a viewer who isn't the owner and isn't an
+// accepted friend of a private user — omits everything that counts as
+// profile *content* (bio, wallpaper, theme) or personal info (email).
+userSchema.methods.toPublicRestricted = function () {
+  return {
+    id: this._id,
+    username: this.username,
+    displayName: this.displayName,
+    avatarUrl: this.avatarUrl,
+    isPrivate: this.isPrivate,
+    createdAt: this.createdAt,
+  };
+};
+
 export const User = mongoose.model("User", userSchema);
