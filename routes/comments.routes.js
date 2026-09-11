@@ -3,31 +3,25 @@ import { Comment } from "../models/Comment.js";
 import { Post } from "../models/Post.js";
 import { Notification } from "../models/Notification.js";
 import { requireAuth } from "../middleware/auth.js";
-import { toPublicUser } from "../utils/serialize.js";
+import { toPublicComment } from "../utils/serialize.js";
 
 export const commentsRouter = Router();
 
 commentsRouter.get("/posts/:postId/comments", async (req, res) => {
   const comments = await Comment.find({ post: req.params.postId }).sort("createdAt").populate("author");
-  res.json({
-    comments: comments.map((c) => ({
-      id: c._id,
-      content: c.content,
-      createdAt: c.createdAt,
-      author: toPublicUser(c.author),
-    })),
-  });
+  res.json({ comments: comments.map(toPublicComment) });
 });
 
 commentsRouter.post("/posts/:postId/comments", requireAuth, async (req, res) => {
   const post = await Post.findById(req.params.postId);
   if (!post) return res.status(404).json({ error: "Post not found" });
 
-  const comment = await Comment.create({
+  let comment = await Comment.create({
     post: post._id,
     author: req.user.id,
     content: req.body.content,
   });
+  comment = await comment.populate("author");
 
   if (String(post.author) !== req.user.id) {
     await Notification.create({
@@ -37,7 +31,7 @@ commentsRouter.post("/posts/:postId/comments", requireAuth, async (req, res) => 
     });
   }
 
-  res.status(201).json({ id: comment._id, content: comment.content, createdAt: comment.createdAt });
+  res.status(201).json({ comment: toPublicComment(comment) });
 });
 
 commentsRouter.delete("/comments/:id", requireAuth, async (req, res) => {

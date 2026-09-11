@@ -7,7 +7,7 @@ import { ProfileComment } from "../models/ProfileComment.js";
 import { Track } from "../models/Track.js";
 import { Notification } from "../models/Notification.js";
 import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
-import { toPublicUser } from "../utils/serialize.js";
+import { toPublicUser, toPublicTrack, toPublicComment } from "../utils/serialize.js";
 
 export const profilesRouter = Router();
 
@@ -136,14 +136,7 @@ profilesRouter.get("/:username/comments", async (req, res) => {
   const comments = await ProfileComment.find({ profileOwner: user._id })
     .sort("-createdAt")
     .populate("author");
-  res.json({
-    comments: comments.map((c) => ({
-      id: c._id,
-      content: c.content,
-      createdAt: c.createdAt,
-      author: toPublicUser(c.author),
-    })),
-  });
+  res.json({ comments: comments.map(toPublicComment) });
 });
 
 profilesRouter.post("/:username/comments", requireAuth, async (req, res) => {
@@ -152,11 +145,12 @@ profilesRouter.post("/:username/comments", requireAuth, async (req, res) => {
   if (await areBlocked(req.user.id, owner._id)) {
     return res.status(403).json({ error: "Not allowed" });
   }
-  const comment = await ProfileComment.create({
+  let comment = await ProfileComment.create({
     profileOwner: owner._id,
     author: req.user.id,
     content: req.body.content,
   });
+  comment = await comment.populate("author");
   if (String(owner._id) !== req.user.id) {
     await Notification.create({
       recipient: owner._id,
@@ -164,14 +158,14 @@ profilesRouter.post("/:username/comments", requireAuth, async (req, res) => {
       payload: { commentId: comment._id, actorId: req.user.id },
     });
   }
-  res.status(201).json({ id: comment._id, content: comment.content, createdAt: comment.createdAt });
+  res.status(201).json({ comment: toPublicComment(comment) });
 });
 
 profilesRouter.get("/:username/tracks", attachUserIfPresent, async (req, res) => {
   try {
     const user = await getProfileForViewer(req.params.username, req.user?.id);
     const tracks = await Track.find({ owner: user._id }).sort("position");
-    res.json({ tracks });
+    res.json({ tracks: tracks.map(toPublicTrack) });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }

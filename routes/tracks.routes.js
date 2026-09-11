@@ -2,6 +2,7 @@ import { Router } from "express";
 import { Track } from "../models/Track.js";
 import { requireAuth } from "../middleware/auth.js";
 import { extractYouTubeId } from "../utils/youtube.js";
+import { toPublicTrack } from "../utils/serialize.js";
 
 export const tracksRouter = Router();
 tracksRouter.use(requireAuth);
@@ -24,7 +25,7 @@ tracksRouter.post("/", async (req, res) => {
     url,
     position: count,
   });
-  res.status(201).json({ track });
+  res.status(201).json({ track: toPublicTrack(track) });
 });
 
 tracksRouter.delete("/:id", async (req, res) => {

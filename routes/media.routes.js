@@ -3,6 +3,7 @@ import { MediaItem } from "../models/MediaItem.js";
 import { User } from "../models/User.js";
 import { requireAuth } from "../middleware/auth.js";
 import { upload } from "../middleware/upload.js";
+import { toPublicMediaItem } from "../utils/serialize.js";
 
 export const mediaRouter = Router();
 
@@ -21,7 +22,7 @@ mediaRouter.post("/upload", requireAuth, upload.single("file"), async (req, res)
         ? "audio"
         : "image";
     const item = await MediaItem.create({ owner: req.user.id, url, type: mediaType });
-    return res.status(201).json({ url, mediaItem: item });
+    return res.status(201).json({ url, mediaItem: toPublicMediaItem(item) });
   }
 
   res.status(201).json({ url });
@@ -35,14 +36,14 @@ mediaRouter.post("/", requireAuth, async (req, res) => {
     caption: req.body.caption,
     isAiImage: req.body.isAiImage || false,
   });
-  res.status(201).json({ mediaItem: item });
+  res.status(201).json({ mediaItem: toPublicMediaItem(item) });
 });
 
 mediaRouter.get("/user/:username", async (req, res) => {
   const user = await User.findOne({ username: req.params.username });
   if (!user) return res.status(404).json({ error: "User not found" });
   const items = await MediaItem.find({ owner: user._id }).sort("-createdAt");
-  res.json({ mediaItems: items });
+  res.json({ media: items.map(toPublicMediaItem) });
 });
 
 mediaRouter.delete("/:id", requireAuth, async (req, res) => {
