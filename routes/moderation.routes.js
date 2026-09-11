@@ -11,6 +11,9 @@ moderationRouter.use(requireAuth);
 moderationRouter.post("/users/:username/block", async (req, res) => {
   const target = await User.findOne({ username: req.params.username });
   if (!target) return res.status(404).json({ error: "User not found" });
+  if (String(target._id) === req.user.id) {
+    return res.status(400).json({ error: "Cannot block yourself" });
+  }
 
   await Friendship.deleteMany({
     $or: [
