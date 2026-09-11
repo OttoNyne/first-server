@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { MediaItem } from "../models/MediaItem.js";
-import { User } from "../models/User.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { upload } from "../middleware/upload.js";
 import { toPublicMediaItem } from "../utils/serialize.js";
+import { getProfileForViewer } from "../utils/visibility.js";
 
 export const mediaRouter = Router();
 
@@ -39,11 +39,14 @@ mediaRouter.post("/", requireAuth, async (req, res) => {
   res.status(201).json({ mediaItem: toPublicMediaItem(item) });
 });
 
-mediaRouter.get("/user/:username", async (req, res) => {
-  const user = await User.findOne({ username: req.params.username });
-  if (!user) return res.status(404).json({ error: "User not found" });
-  const items = await MediaItem.find({ owner: user._id }).sort("-createdAt");
-  res.json({ media: items.map(toPublicMediaItem) });
+mediaRouter.get("/user/:username", attachUserIfPresent, async (req, res) => {
+  try {
+    const user = await getProfileForViewer(req.params.username, req.user?.id);
+    const items = await MediaItem.find({ owner: user._id }).sort("-createdAt");
+    res.json({ media: items.map(toPublicMediaItem) });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
 });
 
 mediaRouter.delete("/:id", requireAuth, async (req, res) => {

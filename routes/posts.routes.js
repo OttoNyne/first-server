@@ -2,9 +2,9 @@ import { Router } from "express";
 import { Post } from "../models/Post.js";
 import { Comment } from "../models/Comment.js";
 import { Friendship } from "../models/Friendship.js";
-import { User } from "../models/User.js";
 import { requireAuth } from "../middleware/auth.js";
 import { toPublicPost } from "../utils/serialize.js";
+import { getProfileForViewer } from "../utils/visibility.js";
 
 export const postsRouter = Router();
 postsRouter.use(requireAuth);
@@ -36,10 +36,13 @@ postsRouter.get("/feed", async (req, res) => {
 });
 
 postsRouter.get("/user/:username", async (req, res) => {
-  const user = await User.findOne({ username: req.params.username });
-  if (!user) return res.status(404).json({ error: "User not found" });
-  const posts = await Post.find({ author: user._id }).sort("-createdAt").populate("author");
-  res.json({ posts: await withCommentCounts(posts) });
+  try {
+    const user = await getProfileForViewer(req.params.username, req.user.id);
+    const posts = await Post.find({ author: user._id }).sort("-createdAt").populate("author");
+    res.json({ posts: await withCommentCounts(posts) });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
 });
 
 postsRouter.post("/", async (req, res) => {

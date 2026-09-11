@@ -1,62 +1,14 @@
 import { Router } from "express";
 import { User } from "../models/User.js";
-import { Block } from "../models/Block.js";
-import { Friendship } from "../models/Friendship.js";
 import { TopFriend } from "../models/TopFriend.js";
 import { ProfileComment } from "../models/ProfileComment.js";
 import { Track } from "../models/Track.js";
 import { Notification } from "../models/Notification.js";
 import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { toPublicUser, toPublicTrack, toPublicComment } from "../utils/serialize.js";
+import { getProfileForViewer } from "../utils/visibility.js";
 
 export const profilesRouter = Router();
-
-async function areBlocked(idA, idB) {
-  const block = await Block.findOne({
-    $or: [
-      { blocker: idA, blocked: idB },
-      { blocker: idB, blocked: idA },
-    ],
-  });
-  return !!block;
-}
-
-async function areFriends(idA, idB) {
-  const friendship = await Friendship.findOne({
-    status: "accepted",
-    $or: [
-      { requester: idA, addressee: idB },
-      { requester: idB, addressee: idA },
-    ],
-  });
-  return !!friendship;
-}
-
-async function getProfileForViewer(username, viewerId) {
-  const user = await User.findOne({ username });
-  if (!user) {
-    const err = new Error("User not found");
-    err.status = 404;
-    throw err;
-  }
-
-  if (viewerId && (await areBlocked(viewerId, user._id))) {
-    const err = new Error("Profile not available");
-    err.status = 403;
-    throw err;
-  }
-
-  if (user.isPrivate && String(user._id) !== String(viewerId)) {
-    const isFriend = viewerId ? await areFriends(viewerId, user._id) : false;
-    if (!isFriend) {
-      const err = new Error("This profile is private");
-      err.status = 403;
-      throw err;
-    }
-  }
-
-  return user;
-}
 
 profilesRouter.get("/", requireAuth, async (req, res) => {
   const search = req.query.search;
@@ -123,27 +75,34 @@ profilesRouter.get("/:username", attachUserIfPresent, async (req, res) => {
   }
 });
 
-profilesRouter.get("/:username/top-friends", async (req, res) => {
-  const user = await User.findOne({ username: req.params.username });
-  if (!user) return res.status(404).json({ error: "User not found" });
-  const topFriends = await TopFriend.find({ owner: user._id }).sort("position").populate("target");
-  res.json({ topFriends: topFriends.map((tf) => toPublicUser(tf.target)) });
+profilesRouter.get("/:username/top-friends", attachUserIfPresent, async (req, res) => {
+  try {
+    const user = await getProfileForViewer(req.params.username, req.user?.id);
+    const topFriends = await TopFriend.find({ owner: user._id }).sort("position").populate("target");
+    res.json({ topFriends: topFriends.map((tf) => toPublicUser(tf.target)) });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
 });
 
-profilesRouter.get("/:username/comments", async (req, res) => {
-  const user = await User.findOne({ username: req.params.username });
-  if (!user) return res.status(404).json({ error: "User not found" });
-  const comments = await ProfileComment.find({ profileOwner: user._id })
-    .sort("-createdAt")
-    .populate("author");
-  res.json({ comments: comments.map(toPublicComment) });
+profilesRouter.get("/:username/comments", attachUserIfPresent, async (req, res) => {
+  try {
+    const user = await getProfileForViewer(req.params.username, req.user?.id);
+    const comments = await ProfileComment.find({ profileOwner: user._id })
+      .sort("-createdAt")
+      .populate("author");
+    res.json({ comments: comments.map(toPublicComment) });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
 });
 
 profilesRouter.post("/:username/comments", requireAuth, async (req, res) => {
-  const owner = await User.findOne({ username: req.params.username });
-  if (!owner) return res.status(404).json({ error: "User not found" });
-  if (await areBlocked(req.user.id, owner._id)) {
-    return res.status(403).json({ error: "Not allowed" });
+  let owner;
+  try {
+    owner = await getProfileForViewer(req.params.username, req.user.id);
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message });
   }
   let comment = await ProfileComment.create({
     profileOwner: owner._id,
