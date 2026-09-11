@@ -1,20 +1,36 @@
 import { Router } from "express";
 import { Comment } from "../models/Comment.js";
 import { Post } from "../models/Post.js";
+import { User } from "../models/User.js";
 import { Notification } from "../models/Notification.js";
 import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { toPublicComment } from "../utils/serialize.js";
+import { assertVisible } from "../utils/visibility.js";
 
 export const commentsRouter = Router();
 
 commentsRouter.get("/posts/:postId/comments", attachUserIfPresent, async (req, res) => {
-  const comments = await Comment.find({ post: req.params.postId }).sort("createdAt").populate("author");
-  res.json({ comments: await Promise.all(comments.map((c) => toPublicComment(c, req.user?.id))) });
+  try {
+    const post = await Post.findById(req.params.postId);
+    if (!post) return res.status(404).json({ error: "Post not found" });
+    await assertVisible(await User.findById(post.author), req.user?.id);
+
+    const comments = await Comment.find({ post: req.params.postId }).sort("createdAt").populate("author");
+    res.json({ comments: await Promise.all(comments.map((c) => toPublicComment(c, req.user?.id))) });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
 });
 
 commentsRouter.post("/posts/:postId/comments", requireAuth, async (req, res) => {
   const post = await Post.findById(req.params.postId);
   if (!post) return res.status(404).json({ error: "Post not found" });
+
+  try {
+    await assertVisible(await User.findById(post.author), req.user.id);
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message });
+  }
 
   let comment = await Comment.create({
     post: post._id,

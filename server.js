@@ -55,8 +55,14 @@ app.get("/api/hello", (req, res) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/profiles", profilesRouter);
-app.use("/api/posts", postsRouter);
+// commentsRouter must be mounted before postsRouter: it defines the more
+// specific /posts/:postId/comments routes (deliberately public for GET),
+// while postsRouter applies a blanket requireAuth to everything under
+// /api/posts — if postsRouter ran first, an anonymous GET here would be
+// rejected by that blanket auth before ever reaching this router's own,
+// intentionally public, handler.
 app.use("/api", commentsRouter);
+app.use("/api/posts", postsRouter);
 app.use("/api/friends", friendsRouter);
 app.use("/api/groups", groupsRouter);
 app.use("/api/media", mediaRouter);

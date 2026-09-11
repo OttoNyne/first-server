@@ -23,14 +23,13 @@ export async function areFriends(idA, idB) {
   return !!friendship;
 }
 
-// Resolves a profile the way it's actually seen by a given viewer: 404 if the
-// user doesn't exist, 403 if either has blocked the other, and 403 if the
-// profile is private and the viewer isn't the owner or an accepted friend.
-// Any route exposing data scoped to a single user (profile, tracks, media,
-// posts, guestbook comments, top friends) must go through this — otherwise
-// the isPrivate/block settings are silently bypassed for that data.
-export async function getProfileForViewer(username, viewerId) {
-  const user = await User.findOne({ username });
+// Throws (404/403) unless `viewerId` is allowed to see `user`'s content: the
+// user themselves, an accepted friend, or anyone at all if the profile isn't
+// private — and never if either side has blocked the other. Any route
+// exposing data scoped to a single user (profile, tracks, media, posts,
+// comments on those posts, guestbook comments, top friends) must go through
+// this — otherwise the isPrivate/block settings are silently bypassed.
+export async function assertVisible(user, viewerId) {
   if (!user) {
     const err = new Error("User not found");
     err.status = 404;
@@ -53,4 +52,9 @@ export async function getProfileForViewer(username, viewerId) {
   }
 
   return user;
+}
+
+export async function getProfileForViewer(username, viewerId) {
+  const user = await User.findOne({ username });
+  return assertVisible(user, viewerId);
 }
