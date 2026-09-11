@@ -1,9 +1,17 @@
 import "dotenv/config";
 import express from "express";
+import morgan from "morgan";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+function requestTimer(req, res, next) {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  next();
+}
+
+app.use(morgan("dev"));
+app.use(requestTimer);
 app.use(express.json());
 
 app.get("/api/hello", (req, res) => {
@@ -58,6 +66,13 @@ app.delete("/tasks/:id", (req, res) => {
   tasks = tasks.filter((t) => t.id !== Number(req.params.id));
   res.status(204).end();
 });
+
+function errorHandler(err, req, res, next) {
+  console.error(err);
+  res.status(500).json({ error: "Internal server error" });
+}
+
+app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
