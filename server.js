@@ -1,14 +1,15 @@
-import "dotenv/config";
 import express from "express";
 import morgan from "morgan";
+import { loadEnv, connectDB } from "./config/db.js";
+import { requestTimer } from "./middleware/logger.js";
+import { errorHandler } from "./middleware/errorHandler.js";
+import { Task } from "./models/Task.js";
+
+loadEnv();
+await connectDB();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-
-function requestTimer(req, res, next) {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-  next();
-}
 
 app.use(morgan("dev"));
 app.use(requestTimer);
@@ -24,53 +25,49 @@ let tasks = [
   { id: 3, title: "Walk the dog", done: false },
 ];
 
-app.get("/tasks", (req, res) => {
+app.get("/tasks", async (req, res) => {
+  const filter = {};
+  if (req.query.done !== undefined) {
+    filter.done = req.query.done === "true";
+  }
+  const tasks = await Task.find(filter);
   res.json(tasks);
 });
 
-app.get("/tasks/:id", (req, res) => {
-  const task = tasks.find((t) => t.id === Number(req.params.id));
+app.get("/tasks/:id", async (req, res) => {
+  const task = await Task.findById(req.params.id);
   if (!task) {
     return res.status(404).json({ error: "Task not found" });
   }
   res.json(task);
 });
 
-app.post("/tasks", (req, res) => {
+app.post("/tasks", async (req, res) => {
+  console.log("req.body:", req.body);
   if (!req.body.title) {
     return res.status(400).json({ error: "title is required" });
   }
-  const task = {
-    id: Date.now(),
-    title: req.body.title,
-    done: req.body.done ?? false,
-  };
-  tasks.push(task);
+  const task = await Task.create(req.body);
   res.status(201).json(task);
 });
 
-app.put("/tasks/:id", (req, res) => {
-  const task = tasks.find((t) => t.id === Number(req.params.id));
+app.put("/tasks/:id", async (req, res) => {
+  const task = await Task.findByIdAndUpdate(req.params.id, req.body, {
+    new: true,
+  });
   if (!task) {
     return res.status(404).json({ error: "Task not found" });
   }
-  Object.assign(task, req.body);
   res.json(task);
 });
 
-app.delete("/tasks/:id", (req, res) => {
-  const exists = tasks.some((t) => t.id === Number(req.params.id));
-  if (!exists) {
+app.delete("/tasks/:id", async (req, res) => {
+  const task = await Task.findByIdAndDelete(req.params.id);
+  if (!task) {
     return res.status(404).json({ error: "Task not found" });
   }
-  tasks = tasks.filter((t) => t.id !== Number(req.params.id));
-  res.status(204).end();
+  res.json({ message: "Task deleted" });
 });
-
-function errorHandler(err, req, res, next) {
-  console.error(err);
-  res.status(500).json({ error: "Internal server error" });
-}
 
 app.use(errorHandler);
 
