@@ -1,88 +1,70 @@
 import express from "express";
 import morgan from "morgan";
+import cors from "cors";
+import helmet from "helmet";
+import cookieParser from "cookie-parser";
+import path from "path";
+import { fileURLToPath } from "url";
 import { loadEnv, connectDB } from "./config/db.js";
 import { requestTimer } from "./middleware/logger.js";
 import { errorHandler } from "./middleware/errorHandler.js";
-import { Task } from "./models/Task.js";
+import { ensureUploadDirs, UPLOADS_ROOT } from "./middleware/upload.js";
+
+import { authRouter } from "./routes/auth.routes.js";
+import { profilesRouter } from "./routes/profiles.routes.js";
+import { postsRouter } from "./routes/posts.routes.js";
+import { commentsRouter } from "./routes/comments.routes.js";
+import { friendsRouter } from "./routes/friends.routes.js";
+import { groupsRouter } from "./routes/groups.routes.js";
+import { mediaRouter } from "./routes/media.routes.js";
+import { notificationsRouter } from "./routes/notifications.routes.js";
+import { moderationRouter } from "./routes/moderation.routes.js";
+import { aiRouter } from "./routes/ai.routes.js";
+import { tracksRouter } from "./routes/tracks.routes.js";
+import { tasksRouter } from "./routes/tasks.routes.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 loadEnv();
 await connectDB();
+ensureUploadDirs();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+app.use(helmet());
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    credentials: true,
+  })
+);
 app.use(morgan("dev"));
 app.use(requestTimer);
 app.use(express.json());
+app.use(cookieParser());
+app.use("/uploads", express.static(UPLOADS_ROOT));
+
+app.get("/api/health", (req, res) => {
+  res.json({ ok: true });
+});
 
 app.get("/api/hello", (req, res) => {
   res.json({ message: "hello" });
 });
 
-let tasks = [
-  { id: 1, title: "Buy groceries", done: false },
-  { id: 2, title: "Write report", done: true },
-  { id: 3, title: "Walk the dog", done: false },
-];
-
-app.get("/tasks", async (req, res) => {
-  const filter = {};
-  if (req.query.done !== undefined) {
-    filter.done = req.query.done === "true";
-  }
-  const sort = req.query.sort || "-createdAt";
-
-  let page = parseInt(req.query.page);
-  if (!Number.isInteger(page) || page < 1) {
-    page = 1;
-  }
-
-  let limit = parseInt(req.query.limit);
-  if (!Number.isInteger(limit) || limit < 1) {
-    limit = 20;
-  }
-  limit = Math.min(limit, 100);
-
-  const skip = (page - 1) * limit;
-
-  const tasks = await Task.find(filter).sort(sort).limit(limit).skip(skip);
-  res.json(tasks);
-});
-
-app.get("/tasks/:id", async (req, res) => {
-  const task = await Task.findById(req.params.id);
-  if (!task) {
-    return res.status(404).json({ error: "Task not found" });
-  }
-  res.json(task);
-});
-
-app.post("/tasks", async (req, res) => {
-  console.log("req.body:", req.body);
-  if (!req.body.title) {
-    return res.status(400).json({ error: "title is required" });
-  }
-  const task = await Task.create(req.body);
-  res.status(201).json(task);
-});
-
-app.put("/tasks/:id", async (req, res) => {
-  const task = await Task.findByIdAndUpdate(req.params.id, req.body, {
-    new: true,
-  });
-  if (!task) {
-    return res.status(404).json({ error: "Task not found" });
-  }
-  res.json(task);
-});
-
-app.delete("/tasks/:id", async (req, res) => {
-  const task = await Task.findByIdAndDelete(req.params.id);
-  if (!task) {
-    return res.status(404).json({ error: "Task not found" });
-  }
-  res.json({ message: "Task deleted" });
-});
+app.use("/api/auth", authRouter);
+app.use("/api/profiles", profilesRouter);
+app.use("/api/posts", postsRouter);
+app.use("/api", commentsRouter);
+app.use("/api/friends", friendsRouter);
+app.use("/api/groups", groupsRouter);
+app.use("/api/media", mediaRouter);
+app.use("/api/notifications", notificationsRouter);
+app.use("/api", moderationRouter);
+app.use("/api/ai", aiRouter);
+app.use("/api/tracks", tracksRouter);
+app.use("/api/tasks", tasksRouter);
 
 app.use(errorHandler);
 
