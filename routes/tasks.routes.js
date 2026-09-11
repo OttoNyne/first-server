@@ -46,9 +46,15 @@ tasksRouter.post("/", async (req, res) => {
 });
 
 tasksRouter.put("/:id", async (req, res) => {
+  const updates = {};
+  if (req.body.title !== undefined) updates.title = req.body.title;
+  if (req.body.done !== undefined) updates.done = req.body.done;
+  if (req.body.priority !== undefined) updates.priority = req.body.priority;
+  if (req.body.dueDate !== undefined) updates.dueDate = req.body.dueDate;
+
   const task = await Task.findOneAndUpdate(
     { _id: req.params.id, owner: req.user.id },
-    req.body,
+    updates,
     { new: true }
   );
   if (!task) {
