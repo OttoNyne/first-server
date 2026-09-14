@@ -6,6 +6,13 @@ export function errorHandler(err, req, res, next) {
   if (err.name === "CastError") {
     return res.status(400).json({ error: "Invalid id" });
   }
+  // Multer rejects an oversized/malformed upload by calling next(err) itself
+  // — same reasoning as CastError above, a client mistake, not a server one.
+  if (err.name === "MulterError") {
+    const message =
+      err.code === "LIMIT_FILE_SIZE" ? "File exceeds the 30MB upload limit" : err.message;
+    return res.status(413).json({ error: message });
+  }
   console.error(err);
   res.status(500).json({ error: "Internal server error" });
 }
