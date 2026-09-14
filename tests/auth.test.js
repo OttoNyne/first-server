@@ -1,11 +1,16 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import request from "supertest";
-import { app } from "../app.js";
 import { connectTestDb, clearTestDb, disconnectTestDb } from "./helpers/testDb.js";
 
 describe("auth", () => {
+  let app;
+
   beforeAll(async () => {
     await connectTestDb();
+    // Loaded dynamically, after the test env/DB are set up — app.js reads
+    // process.env at middleware-setup time, so it must not be imported
+    // before loadEnv() (inside connectTestDb) has run.
+    ({ app } = await import("../app.js"));
   });
 
   beforeEach(async () => {

@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import request from "supertest";
-import { app } from "../app.js";
 import { connectTestDb, clearTestDb, disconnectTestDb } from "./helpers/testDb.js";
 
 async function registerAndLogin(agent, overrides = {}) {
@@ -16,8 +15,12 @@ async function registerAndLogin(agent, overrides = {}) {
 }
 
 describe("tasks CRUD", () => {
+  let app;
+
   beforeAll(async () => {
     await connectTestDb();
+    // Loaded dynamically, after loadEnv() — see the comment in auth.test.js.
+    ({ app } = await import("../app.js"));
   });
 
   beforeEach(async () => {
