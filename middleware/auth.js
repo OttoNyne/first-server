@@ -11,10 +11,18 @@ export function signAuthToken(user) {
 }
 
 export function setAuthCookie(res, token) {
+  const isProduction = process.env.NODE_ENV === "production";
   res.cookie(AUTH_COOKIE_NAME, token, {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // In dev, frontend/backend are different ports on localhost — same
+    // registrable domain, so "lax" already sends the cookie cross-port.
+    // In production, they're on genuinely different domains (Render vs
+    // Vercel) — a cross-site fetch only carries the cookie if it's
+    // SameSite=None, which itself requires Secure (HTTPS, true on both
+    // platforms). Without this, login would silently "succeed" but no
+    // protected route would ever see the cookie.
+    sameSite: isProduction ? "none" : "lax",
+    secure: isProduction,
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: "/",
   });
