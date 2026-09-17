@@ -13,6 +13,9 @@ tracksRouter.post("/", async (req, res) => {
 
   let url = req.body.url;
   if (req.body.sourceType === "youtube") {
+    if (typeof url !== "string" || !url) {
+      return res.status(400).json({ error: "url is required" });
+    }
     const id = extractYouTubeId(url);
     if (!id) return res.status(400).json({ error: "Invalid YouTube URL" });
     url = id;
