@@ -6,6 +6,14 @@ export function errorHandler(err, req, res, next) {
   if (err.name === "CastError") {
     return res.status(400).json({ error: "Invalid id" });
   }
+  // A missing/invalid required field caught by the Mongoose schema itself
+  // (routes that pass req.body straight to .create()/.save() without their
+  // own validation, e.g. group creation) is a client mistake too — same
+  // reasoning as CastError above.
+  if (err.name === "ValidationError") {
+    const firstError = Object.values(err.errors)[0];
+    return res.status(400).json({ error: firstError?.message || "Validation failed" });
+  }
   // Multer rejects an oversized/malformed upload by calling next(err) itself
   // — same reasoning as CastError above, a client mistake, not a server one.
   if (err.name === "MulterError") {
