@@ -39,7 +39,11 @@ profilesRouter.patch("/me", requireAuth, async (req, res) => {
 });
 
 profilesRouter.put("/me/top-friends", requireAuth, async (req, res) => {
-  const usernames = (req.body.usernames || []).slice(0, 8);
+  // req.body.usernames must be an array of strings — a string or number here
+  // still has .slice() (or neither), so an unvalidated non-array shape
+  // reaches .map() below and crashes instead of just being treated as empty.
+  const rawUsernames = Array.isArray(req.body.usernames) ? req.body.usernames : [];
+  const usernames = rawUsernames.filter((u) => typeof u === "string").slice(0, 8);
   const users = await User.find({ username: { $in: usernames } });
   const byUsername = new Map(users.map((u) => [u.username, u]));
 
