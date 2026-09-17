@@ -3,6 +3,7 @@ import { Group } from "../models/Group.js";
 import { GroupMembership } from "../models/GroupMembership.js";
 import { requireAuth } from "../middleware/auth.js";
 import { toPublicUser } from "../utils/serialize.js";
+import { escapeRegex } from "../utils/regex.js";
 
 export const groupsRouter = Router();
 groupsRouter.use(requireAuth);
@@ -33,9 +34,7 @@ async function withMemberInfo(groups, viewerId) {
 }
 
 groupsRouter.get("/", async (req, res) => {
-  const filter = req.query.search
-    ? { name: { $regex: req.query.search, $options: "i" } }
-    : {};
+  const filter = req.query.search ? { name: { $regex: escapeRegex(req.query.search), $options: "i" } } : {};
   const groups = await Group.find(filter).sort("-createdAt");
   res.json({ groups: await withMemberInfo(groups, req.user.id) });
 });

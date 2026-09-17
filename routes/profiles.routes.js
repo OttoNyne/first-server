@@ -7,17 +7,16 @@ import { Notification } from "../models/Notification.js";
 import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { toPublicUser, toPublicTrack, toPublicComment } from "../utils/serialize.js";
 import { getProfileForViewer } from "../utils/visibility.js";
+import { escapeRegex } from "../utils/regex.js";
 
 export const profilesRouter = Router();
 
 profilesRouter.get("/", requireAuth, async (req, res) => {
   const search = req.query.search;
   if (!search) return res.json({ users: [] });
+  const pattern = escapeRegex(search);
   const users = await User.find({
-    $or: [
-      { username: { $regex: search, $options: "i" } },
-      { displayName: { $regex: search, $options: "i" } },
-    ],
+    $or: [{ username: { $regex: pattern, $options: "i" } }, { displayName: { $regex: pattern, $options: "i" } }],
   }).limit(20);
   res.json({ users: await Promise.all(users.map((u) => toPublicUser(u, req.user.id))) });
 });
