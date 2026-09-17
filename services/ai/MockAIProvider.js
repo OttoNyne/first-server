@@ -47,8 +47,8 @@ export class MockAIProvider {
     const [c1, c2] = hashToColors(prompt);
     const animate = kind === "wallpaper" && live;
     const svg = animate
-      ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${c1}"><animate attributeName="stop-color" values="${c1};${c2};${c1}" dur="6s" repeatCount="indefinite"/></stop><stop offset="100%" stop-color="${c2}"><animate attributeName="stop-color" values="${c2};${c1};${c2}" dur="6s" repeatCount="indefinite"/></stop></linearGradient></defs><rect width="400" height="400" fill="url(#g)"/></svg>`
-      : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${c1}"/><stop offset="100%" stop-color="${c2}"/></linearGradient></defs><rect width="400" height="400" fill="url(#g)"/></svg>`;
+      ? `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${c1}"><animate attributeName="stop-color" values="${c1};${c2};${c1}" dur="6s" repeatCount="indefinite"/></stop><stop offset="100%" stop-color="${c2}"><animate attributeName="stop-color" values="${c2};${c1};${c2}" dur="6s" repeatCount="indefinite"/></stop></linearGradient></defs><rect width="400" height="400" fill="url(#g)"/></svg>`
+      : `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${c1}"/><stop offset="100%" stop-color="${c2}"/></linearGradient></defs><rect width="400" height="400" fill="url(#g)"/></svg>`;
 
     const url = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
     return { url };
