@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import morgan from "morgan";
 import cors from "cors";
 import helmet from "helmet";
@@ -33,8 +34,13 @@ app.use(requestTimer);
 app.use(express.json());
 app.use(cookieParser());
 
+// readyState: 1 = connected. A cheap in-memory check, no DB round-trip —
+// this is what would have caught the stale-hostname outage in the security
+// review: the server stayed "up" while every DB-backed route silently
+// failed, because this endpoint never looked past its own process state.
 app.get("/api/health", (req, res) => {
-  res.json({ ok: true });
+  const dbConnected = mongoose.connection.readyState === 1;
+  res.status(dbConnected ? 200 : 503).json({ ok: dbConnected, db: dbConnected ? "connected" : "disconnected" });
 });
 
 app.get("/api/hello", (req, res) => {
