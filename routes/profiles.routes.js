@@ -48,12 +48,18 @@ profilesRouter.put("/me/top-friends", requireAuth, async (req, res) => {
   const byUsername = new Map(users.map((u) => [u.username, u]));
 
   await TopFriend.deleteMany({ owner: req.user.id });
-  const docs = usernames
-    .map((username, index) => {
-      const target = byUsername.get(username);
-      return target ? { owner: req.user.id, target: target._id, position: index } : null;
-    })
-    .filter(Boolean);
+  // Dedupe by resolved target id, not the raw username string — the unique
+  // (owner, target) index means the same friend picked twice (a repeated
+  // or case-variant username) would otherwise crash insertMany with a
+  // duplicate-key error. Re-index position contiguously over what's kept.
+  const seenTargets = new Set();
+  const docs = [];
+  for (const username of usernames) {
+    const target = byUsername.get(username);
+    if (!target || seenTargets.has(String(target._id))) continue;
+    seenTargets.add(String(target._id));
+    docs.push({ owner: req.user.id, target: target._id, position: docs.length });
+  }
   if (docs.length) await TopFriend.insertMany(docs);
 
   res.status(204).end();
