@@ -5,7 +5,6 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { requestTimer } from "./middleware/logger.js";
 import { errorHandler } from "./middleware/errorHandler.js";
-import { UPLOADS_ROOT } from "./middleware/upload.js";
 
 import { authRouter } from "./routes/auth.routes.js";
 import { profilesRouter } from "./routes/profiles.routes.js";
@@ -33,7 +32,6 @@ app.use(morgan("dev"));
 app.use(requestTimer);
 app.use(express.json());
 app.use(cookieParser());
-app.use("/uploads", express.static(UPLOADS_ROOT));
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });

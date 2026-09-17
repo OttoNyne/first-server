@@ -30,6 +30,9 @@ The server listens on port 5000 (override with `PORT`) and logs
 | `JWT_SECRET` | yes | Signs/verifies the auth cookie |
 | `PORT` | no (default 5000) | HTTP port |
 | `CLIENT_URL` | no (default `http://localhost:3000`) | Allowed CORS origin — set this to your actual frontend origin (e.g. `http://localhost:5173` in dev) |
+| `CLOUDINARY_CLOUD_NAME` | yes (for uploads) | Cloudinary account cloud name |
+| `CLOUDINARY_API_KEY` | yes (for uploads) | Cloudinary API key |
+| `CLOUDINARY_API_SECRET` | yes (for uploads) | Cloudinary API secret |
 
 ## Tests
 
@@ -60,6 +63,10 @@ tasks).
 
 ## Uploads
 
-Uploaded files (avatars, wallpapers, portfolio images, tracks, AI-generated
-images) are written to `uploads/` on local disk and served back via
-`/uploads/...` — this directory is gitignored, not committed.
+Uploaded files (avatars, wallpapers, portfolio images, tracks) are streamed
+directly to [Cloudinary](https://cloudinary.com) and stored by URL — nothing
+is written to local disk, so files survive restarts and redeploys even on
+Render's free tier (which has an ephemeral filesystem). Sign up for a free
+Cloudinary account and set the three `CLOUDINARY_*` env vars above; without
+them, `POST /api/media/upload` will fail. AI-generated mock wallpapers are
+tiny inline SVGs returned as `data:` URIs and don't touch storage at all.

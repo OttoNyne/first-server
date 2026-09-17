@@ -10,10 +10,7 @@ export const mediaRouter = Router();
 mediaRouter.post("/upload", requireAuth, upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   const purpose = req.query.purpose || "portfolio";
-  const folder = ["avatars", "wallpapers", "portfolio", "tracks"].includes(purpose)
-    ? purpose
-    : "portfolio";
-  const url = `/uploads/${folder}/${req.file.filename}`;
+  const url = req.file.path;
 
   if (purpose === "portfolio" || !["avatars", "wallpapers", "tracks"].includes(purpose)) {
     const mediaType = req.file.mimetype.startsWith("video")

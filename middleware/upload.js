@@ -1,12 +1,13 @@
-import fs from "fs";
-import path from "path";
 import crypto from "crypto";
 import multer from "multer";
-import { fileURLToPath } from "url";
+import { v2 as cloudinary } from "cloudinary";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-export const UPLOADS_ROOT = path.join(__dirname, "..", "uploads");
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 const ALLOWED_PURPOSES = ["avatars", "wallpapers", "portfolio", "tracks"];
 
@@ -18,27 +19,21 @@ const PURPOSE_MIME = {
   tracks: ["audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg"],
 };
 
-export function ensureUploadDirs() {
-  for (const folder of [...ALLOWED_PURPOSES, "ai-generated"]) {
-    fs.mkdirSync(path.join(UPLOADS_ROOT, folder), { recursive: true });
-  }
+function purposeFor(req) {
+  return ALLOWED_PURPOSES.includes(req.query.purpose) ? req.query.purpose : "portfolio";
 }
 
-const storage = multer.diskStorage({
-  destination(req, file, cb) {
-    const purpose = ALLOWED_PURPOSES.includes(req.query.purpose) ? req.query.purpose : "portfolio";
-    const dest = path.join(UPLOADS_ROOT, purpose);
-    fs.mkdirSync(dest, { recursive: true });
-    cb(null, dest);
-  },
-  filename(req, file, cb) {
-    cb(null, `${crypto.randomUUID()}${path.extname(file.originalname)}`);
-  },
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: (req, file) => ({
+    folder: `creativeselect/${purposeFor(req)}`,
+    resource_type: "auto",
+    public_id: crypto.randomUUID(),
+  }),
 });
 
 function fileFilter(req, file, cb) {
-  const purpose = ALLOWED_PURPOSES.includes(req.query.purpose) ? req.query.purpose : "portfolio";
-  const allowed = PURPOSE_MIME[purpose] || IMAGE_MIME;
+  const allowed = PURPOSE_MIME[purposeFor(req)] || IMAGE_MIME;
   cb(null, allowed.includes(file.mimetype));
 }
 
