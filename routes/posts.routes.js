@@ -61,6 +61,7 @@ postsRouter.delete("/:id", async (req, res) => {
   const post = await Post.findById(req.params.id);
   if (!post) return res.status(404).json({ error: "Post not found" });
   if (String(post.author) !== req.user.id) return res.status(403).json({ error: "Not allowed" });
+  await Comment.deleteMany({ post: post._id });
   await post.deleteOne();
   res.status(204).end();
 });

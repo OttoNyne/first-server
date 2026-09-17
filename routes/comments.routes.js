@@ -54,7 +54,10 @@ commentsRouter.delete("/comments/:id", requireAuth, async (req, res) => {
   const comment = await Comment.findById(req.params.id).populate("post");
   if (!comment) return res.status(404).json({ error: "Comment not found" });
   const isAuthor = String(comment.author) === req.user.id;
-  const isPostAuthor = String(comment.post.author) === req.user.id;
+  // comment.post can be null for a comment whose post was since deleted
+  // (pre-cascade-delete data, or any other path that orphans a comment) —
+  // only the comment's own author can still remove it in that case.
+  const isPostAuthor = comment.post ? String(comment.post.author) === req.user.id : false;
   if (!isAuthor && !isPostAuthor) return res.status(403).json({ error: "Not allowed" });
   await comment.deleteOne();
   res.status(204).end();
