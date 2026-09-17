@@ -10,7 +10,12 @@ tasksRouter.get("/", async (req, res) => {
   if (req.query.done !== undefined) {
     filter.done = req.query.done === "true";
   }
-  const sort = req.query.sort || "-createdAt";
+  // req.query.sort is an array if the client repeats the query param
+  // (?sort=a&sort=b) — Mongoose's .sort() rejects that shape, so normalize
+  // to a single string before it ever reaches the query.
+  let sort = req.query.sort;
+  if (Array.isArray(sort)) sort = sort[0];
+  if (typeof sort !== "string" || !sort) sort = "-createdAt";
 
   let page = parseInt(req.query.page);
   if (!Number.isInteger(page) || page < 1) {
