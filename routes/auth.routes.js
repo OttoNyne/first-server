@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { User } from "../models/User.js";
-import { requireAuth, signAuthToken, setAuthCookie, AUTH_COOKIE_NAME } from "../middleware/auth.js";
+import { requireAuth, signAuthToken, setAuthCookie, clearAuthCookie } from "../middleware/auth.js";
 import { toPublicUser } from "../utils/serialize.js";
 
 export const authRouter = Router();
@@ -71,7 +71,7 @@ authRouter.post("/login", async (req, res) => {
 });
 
 authRouter.post("/logout", (req, res) => {
-  res.clearCookie(AUTH_COOKIE_NAME, { path: "/" });
+  clearAuthCookie(res);
   res.status(204).end();
 });
 

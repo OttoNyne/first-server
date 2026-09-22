@@ -28,6 +28,23 @@ export function setAuthCookie(res, token) {
   });
 }
 
+export function clearAuthCookie(res) {
+  const isProduction = process.env.NODE_ENV === "production";
+  // A clearing Set-Cookie must repeat the same sameSite/secure attributes
+  // the cookie was originally set with — omitting them (res.clearCookie's
+  // default) produces a directive the browser doesn't recognize as
+  // matching a SameSite=None; Secure cookie in production, so it's
+  // silently ignored and the session cookie never actually clears.
+  // Reproduced live: /logout returned 204, but the original cookie stayed
+  // valid and the user stayed logged in.
+  res.clearCookie(AUTH_COOKIE_NAME, {
+    httpOnly: true,
+    sameSite: isProduction ? "none" : "lax",
+    secure: isProduction,
+    path: "/",
+  });
+}
+
 export function requireAuth(req, res, next) {
   const token = req.cookies?.[AUTH_COOKIE_NAME];
   if (!token) {
