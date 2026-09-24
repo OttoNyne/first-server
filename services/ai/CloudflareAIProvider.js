@@ -107,7 +107,7 @@ export class CloudflareAIProvider extends MockAIProvider {
         folder: "creativeselect/ai-generated",
         resource_type: "image",
       });
-      return { url: uploaded.secure_url };
+      return { url: uploaded.secure_url, publicId: uploaded.public_id };
     } catch (err) {
       console.error("Cloudinary upload of generated image failed:", err);
       throw aiError("Couldn't save the generated image, try again");

@@ -5,6 +5,7 @@ import { Friendship } from "../models/Friendship.js";
 import { requireAuth } from "../middleware/auth.js";
 import { toPublicPost } from "../utils/serialize.js";
 import { getProfileForViewer } from "../utils/visibility.js";
+import { deleteGeneratedImageIfUnused } from "../services/generatedImages.js";
 
 export const postsRouter = Router();
 postsRouter.use(requireAuth);
@@ -63,5 +64,8 @@ postsRouter.delete("/:id", async (req, res) => {
   if (String(post.author) !== req.user.id) return res.status(403).json({ error: "Not allowed" });
   await Comment.deleteMany({ post: post._id });
   await post.deleteOne();
+  // An AI-generated image that only this post used would otherwise sit on
+  // Cloudinary forever.
+  if (post.imageUrl) await deleteGeneratedImageIfUnused({ ownerId: post.author, url: post.imageUrl });
   res.status(204).end();
 });

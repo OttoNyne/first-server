@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { createLimiter } from "../utils/rateLimit.js";
+import { recordGeneratedImage } from "../services/generatedImages.js";
 import { getAIProvider, isRealImageProviderConfigured } from "../services/ai/index.js";
 
 export const aiRouter = Router();
@@ -53,7 +54,14 @@ aiRouter.post("/image", async (req, res) => {
       kind: req.body.kind,
       live: req.body.live,
     });
-    res.json(result);
+    // Remember who generated a stored image so it can be deleted with its post.
+    // (The mock provider returns inline data: URIs, which have nothing to clean up.)
+    if (result.publicId) {
+      await recordGeneratedImage({ ownerId: req.user.id, url: result.url, publicId: result.publicId }).catch((err) =>
+        console.error("Couldn't record generated image:", err)
+      );
+    }
+    res.json({ url: result.url });
   } catch (err) {
     handleAIError(err, res);
   }
