@@ -93,6 +93,24 @@ describe("help wanted board", () => {
     expect((await bob.agent.post("/api/tasks/not-an-id/offer")).status).toBe(400);
   });
 
+  it("rate-limits public posts and offers per user", async () => {
+    const alice = await signup(app, "alice");
+    const bob = await signup(app, "bob");
+    for (let i = 0; i < 10; i++) {
+      expect((await alice.agent.post("/api/tasks").send({ title: `t${i}`, isPublic: true })).status).toBe(201);
+    }
+    const over = await alice.agent.post("/api/tasks").send({ title: "one too many", isPublic: true });
+    expect(over.status).toBe(429);
+    // private requests aren't capped
+    expect((await alice.agent.post("/api/tasks").send({ title: "mine" })).status).toBe(201);
+
+    const ids = (await bob.agent.get("/api/tasks/board")).body.tasks.map((t) => t._id);
+    const results = [];
+    for (let i = 0; i < 20; i++) results.push((await bob.agent.post(`/api/tasks/${ids[i % ids.length]}/offer`)).status);
+    expect(results.every((s) => s === 201)).toBe(true);
+    expect((await bob.agent.post(`/api/tasks/${ids[0]}/offer`)).status).toBe(429);
+  }, 30_000);
+
   it("never exposes another user's email, but still shows you your own", async () => {
     const alice = await signup(app, "alice");
     const bob = await signup(app, "bob");
