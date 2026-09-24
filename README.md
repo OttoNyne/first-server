@@ -43,8 +43,9 @@ The server listens on port 5000 (override with `PORT`) and logs
 npm test
 ```
 
-Runs the Vitest + Supertest suite (auth flows, Tasks CRUD, and the public
-Help wanted board — visibility, blocking, offers, rate limits, email privacy)
+Runs the Vitest + Supertest suite (71 tests: auth incl. throttling/CSRF/session
+revocation, Tasks CRUD and the Help wanted board, friends, blocking, groups, media,
+account deletion, password change, stored-asset cleanup)
 against a dedicated `creativeselect_test` database — never the dev database.
 The frontend has its own Vitest + Testing Library suite in the
 [CreativesSelect](https://github.com/OttoNyne/CreativesSelect) repo.
@@ -78,6 +79,17 @@ Render's free tier (which has an ephemeral filesystem). Sign up for a free
 Cloudinary account and set the three `CLOUDINARY_*` env vars above; without
 them, `POST /api/media/upload` will fail.
 
+## Security notes
+
+- Login counts failed attempts per email (10 / 15 min) and per IP (30 / 15 min);
+  registration is capped at 10 per IP per hour. All rate limits are stored in MongoDB
+  (`RateLimitHit`, TTL-indexed), so they survive restarts and are shared across instances.
+- State-changing requests from an `Origin` other than `CLIENT_URL` get `403` (CSRF
+  defense for the cross-site cookie). Set `CLIENT_URL` to the exact frontend origin.
+- `requireAuth` re-checks the user on every request, so deleting an account or
+  changing a password immediately invalidates old tokens.
+- `PUT /api/auth/password` and `DELETE /api/profiles/me` both require the current password.
+
 ## AI images and text
 
 `POST /api/ai/image` generates a real image from the prompt using
@@ -90,7 +102,8 @@ into a color-gradient SVG (a `data:` URI, nothing stored) and never looks at
 what was asked for — fine for local development and tests, which need no keys.
 `POST /api/ai/text` (bios, captions, blurbs) is likewise real when those credentials are set, using Llama 3.1 8B on Workers AI, capped at 30 per user per hour; without them it uses canned templates.
 
-Generated images are recorded in a `GeneratedImage` ledger (who generated which
-Cloudinary asset). Deleting a post removes its image from Cloudinary only if
-that user generated it and nothing else — another post, a wallpaper/avatar, a
-portfolio item — still uses it.
+Every file the server stores on Cloudinary (generated images and uploads) is
+recorded in a `StoredAsset` ledger (whose it is). A file is deleted — when its
+post/portfolio item/track is removed, its avatar/wallpaper is replaced, or the
+account is deleted — only if the ledger says it belongs to that user and nothing
+else still uses it.
