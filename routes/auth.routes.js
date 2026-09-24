@@ -90,6 +90,42 @@ authRouter.post("/login", async (req, res) => {
   }
 });
 
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8).max(72),
+});
+const passwordChangeFails = createLimiter({ name: "change-password", limit: 5, windowMs: FIFTEEN_MIN });
+
+// Change your own password. Needs the current one (a stolen session alone
+// can't lock the real owner out) and is throttled like login.
+authRouter.put("/password", requireAuth, async (req, res) => {
+  try {
+    const parsed = changePasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0].message });
+    }
+    const { currentPassword, newPassword } = parsed.data;
+    if (await passwordChangeFails.isLimited(req.user.id)) return tooManyAttempts(res, passwordChangeFails.windowSeconds);
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
+    if (!(await user.comparePassword(currentPassword))) {
+      await passwordChangeFails.hit(req.user.id);
+      return res.status(403).json({ error: "Current password is incorrect" });
+    }
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ error: "Choose a password different from your current one" });
+    }
+
+    user.password = newPassword;
+    await user.save();
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 authRouter.post("/logout", (req, res) => {
   clearAuthCookie(res);
   res.status(204).end();
