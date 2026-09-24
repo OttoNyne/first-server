@@ -89,3 +89,8 @@ credentials aren't set, `MockAIProvider` is used instead: it turns the prompt
 into a color-gradient SVG (a `data:` URI, nothing stored) and never looks at
 what was asked for — fine for local development and tests, which need no keys.
 `POST /api/ai/text` (bios, captions, blurbs) is likewise real when those credentials are set, using Llama 3.1 8B on Workers AI, capped at 30 per user per hour; without them it uses canned templates.
+
+Generated images are recorded in a `GeneratedImage` ledger (who generated which
+Cloudinary asset). Deleting a post removes its image from Cloudinary only if
+that user generated it and nothing else — another post, a wallpaper/avatar, a
+portfolio item — still uses it.
