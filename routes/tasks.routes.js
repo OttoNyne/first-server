@@ -107,6 +107,13 @@ tasksRouter.post("/:id/offer", async (req, res) => {
     return res.status(429).json({ error: `Offer limit reached (${OFFER_LIMIT} per hour) — try again later` });
   }
 
+  // Optional short note from the offerer, shown in the owner's notification.
+  let message;
+  if (req.body?.message !== undefined) {
+    if (typeof req.body.message !== "string") return res.status(400).json({ error: "message must be text" });
+    message = req.body.message.trim().slice(0, 300) || undefined;
+  }
+
   const already = await Notification.findOne({
     recipient: task.owner._id,
     type: "help_offer",
@@ -117,7 +124,7 @@ tasksRouter.post("/:id/offer", async (req, res) => {
     await Notification.create({
       recipient: task.owner._id,
       type: "help_offer",
-      payload: { taskId: task._id, title: task.title, actorId: req.user.id },
+      payload: { taskId: task._id, title: task.title, actorId: req.user.id, ...(message ? { message } : {}), accepted: false },
     });
   }
   res.status(201).json({ message: "Offer sent" });

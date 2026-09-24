@@ -2,6 +2,7 @@ import { Router } from "express";
 import { MediaItem } from "../models/MediaItem.js";
 import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { upload } from "../middleware/upload.js";
+import { recordStoredAsset, deleteStoredAssetIfUnused } from "../services/storedAssets.js";
 import { toPublicMediaItem } from "../utils/serialize.js";
 import { getProfileForViewer } from "../utils/visibility.js";
 
@@ -11,6 +12,14 @@ mediaRouter.post("/upload", requireAuth, upload.single("file"), async (req, res)
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   const purpose = req.query.purpose || "portfolio";
   const url = req.file.path;
+  // Audio is stored by Cloudinary as a "video" resource; needed later to delete it.
+  await recordStoredAsset({
+    ownerId: req.user.id,
+    url,
+    publicId: req.file.filename,
+    resourceType: req.file.mimetype.startsWith("image") ? "image" : "video",
+    kind: "upload",
+  });
 
   if (purpose === "portfolio" || !["avatars", "wallpapers", "tracks"].includes(purpose)) {
     const mediaType = req.file.mimetype.startsWith("video")
@@ -51,5 +60,6 @@ mediaRouter.delete("/:id", requireAuth, async (req, res) => {
   if (!item) return res.status(404).json({ error: "Media item not found" });
   if (String(item.owner) !== req.user.id) return res.status(403).json({ error: "Not allowed" });
   await item.deleteOne();
+  await deleteStoredAssetIfUnused({ ownerId: item.owner, url: item.url });
   res.status(204).end();
 });

@@ -5,7 +5,7 @@ import { Friendship } from "../models/Friendship.js";
 import { requireAuth } from "../middleware/auth.js";
 import { toPublicPost } from "../utils/serialize.js";
 import { getProfileForViewer } from "../utils/visibility.js";
-import { deleteGeneratedImageIfUnused } from "../services/generatedImages.js";
+import { deleteStoredAssetIfUnused } from "../services/storedAssets.js";
 
 export const postsRouter = Router();
 postsRouter.use(requireAuth);
@@ -66,6 +66,6 @@ postsRouter.delete("/:id", async (req, res) => {
   await post.deleteOne();
   // An AI-generated image that only this post used would otherwise sit on
   // Cloudinary forever.
-  if (post.imageUrl) await deleteGeneratedImageIfUnused({ ownerId: post.author, url: post.imageUrl });
+  if (post.imageUrl) await deleteStoredAssetIfUnused({ ownerId: post.author, url: post.imageUrl });
   res.status(204).end();
 });

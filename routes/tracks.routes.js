@@ -3,6 +3,7 @@ import { Track } from "../models/Track.js";
 import { requireAuth } from "../middleware/auth.js";
 import { extractYouTubeId } from "../utils/youtube.js";
 import { toPublicTrack } from "../utils/serialize.js";
+import { deleteStoredAssetIfUnused } from "../services/storedAssets.js";
 
 export const tracksRouter = Router();
 tracksRouter.use(requireAuth);
@@ -36,6 +37,7 @@ tracksRouter.delete("/:id", async (req, res) => {
   if (!track) return res.status(404).json({ error: "Track not found" });
   if (String(track.owner) !== req.user.id) return res.status(403).json({ error: "Not allowed" });
   await track.deleteOne();
+  if (track.sourceType === "upload") await deleteStoredAssetIfUnused({ ownerId: track.owner, url: track.url });
 
   const remaining = await Track.find({ owner: req.user.id }).sort("position");
   await Promise.all(remaining.map((t, index) => Track.updateOne({ _id: t._id }, { position: index })));
