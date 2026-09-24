@@ -17,9 +17,33 @@ function handleAIError(err, res) {
   res.status(500).json({ error: "Internal server error" });
 }
 
+// Real generation draws on a limited free daily allowance, so cap each user. In-memory is
+// fine for a single instance; it resets on restart, which only ever errs
+// toward allowing a few extra generations.
+const IMAGE_LIMIT = 10;
+const TEXT_LIMIT = 30;
+const WINDOW_MS = 60 * 60 * 1000;
+const imageUsage = new Map();
+const textUsage = new Map();
+
+function withinLimit(usage, userId, limit) {
+  const now = Date.now();
+  const recent = (usage.get(userId) || []).filter((t) => now - t < WINDOW_MS);
+  if (recent.length >= limit) {
+    usage.set(userId, recent);
+    return false;
+  }
+  recent.push(now);
+  usage.set(userId, recent);
+  return true;
+}
+
 aiRouter.post("/text", async (req, res) => {
   if (!req.body.prompt || typeof req.body.prompt !== "string") {
     return res.status(400).json({ error: "prompt is required" });
+  }
+  if (isRealImageProviderConfigured() && !withinLimit(textUsage, req.user.id, TEXT_LIMIT)) {
+    return res.status(429).json({ error: `Text limit reached (${TEXT_LIMIT} per hour) — try again later` });
   }
   try {
     const result = await getAIProvider().generateText({ prompt: req.body.prompt, kind: req.body.kind });
@@ -29,30 +53,11 @@ aiRouter.post("/text", async (req, res) => {
   }
 });
 
-// Real image generation draws on a limited free daily allowance, so cap each user. In-memory is
-// fine for a single instance; it resets on restart, which only ever errs
-// toward allowing a few extra generations.
-const IMAGE_LIMIT = 10;
-const IMAGE_WINDOW_MS = 60 * 60 * 1000;
-const imageUsage = new Map();
-
-function withinImageLimit(userId) {
-  const now = Date.now();
-  const recent = (imageUsage.get(userId) || []).filter((t) => now - t < IMAGE_WINDOW_MS);
-  if (recent.length >= IMAGE_LIMIT) {
-    imageUsage.set(userId, recent);
-    return false;
-  }
-  recent.push(now);
-  imageUsage.set(userId, recent);
-  return true;
-}
-
 aiRouter.post("/image", async (req, res) => {
   if (!req.body.prompt || typeof req.body.prompt !== "string") {
     return res.status(400).json({ error: "prompt is required" });
   }
-  if (isRealImageProviderConfigured() && !withinImageLimit(req.user.id)) {
+  if (isRealImageProviderConfigured() && !withinLimit(imageUsage, req.user.id, IMAGE_LIMIT)) {
     return res.status(429).json({ error: `Image limit reached (${IMAGE_LIMIT} per hour) — try again later` });
   }
   try {

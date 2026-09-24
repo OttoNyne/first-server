@@ -73,7 +73,7 @@ Render's free tier (which has an ephemeral filesystem). Sign up for a free
 Cloudinary account and set the three `CLOUDINARY_*` env vars above; without
 them, `POST /api/media/upload` will fail.
 
-## AI images
+## AI images and text
 
 `POST /api/ai/image` generates a real image from the prompt using
 [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/)
@@ -83,4 +83,4 @@ to 10 images per hour, and prompts are truncated to 500 characters. If the
 credentials aren't set, `MockAIProvider` is used instead: it turns the prompt
 into a color-gradient SVG (a `data:` URI, nothing stored) and never looks at
 what was asked for — fine for local development and tests, which need no keys.
-Text generation (bios, captions) is still the mock either way.
+`POST /api/ai/text` (bios, captions, blurbs) is likewise real when those credentials are set, using Llama 3.1 8B on Workers AI, capped at 30 per user per hour; without them it uses canned templates.
