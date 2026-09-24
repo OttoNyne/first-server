@@ -93,6 +93,18 @@ describe("help wanted board", () => {
     expect((await bob.agent.post("/api/tasks/not-an-id/offer")).status).toBe(400);
   });
 
+  it("never exposes another user's email, but still shows you your own", async () => {
+    const alice = await signup(app, "alice");
+    const bob = await signup(app, "bob");
+    await alice.agent.post("/api/tasks").send({ title: "x", isPublic: true });
+
+    const board = await bob.agent.get("/api/tasks/board");
+    expect(board.body.tasks[0].author.email).toBeUndefined();
+    expect((await bob.agent.get("/api/profiles/alice")).body.user.email).toBeUndefined();
+    expect((await bob.agent.get("/api/profiles?search=alice")).body.users[0].email).toBeUndefined();
+    expect((await bob.agent.get("/api/auth/me")).body.user.email).toBe("bob@example.com");
+  });
+
   it("doesn't let the create body set the owner or done state", async () => {
     const alice = await signup(app, "alice");
     const bob = await signup(app, "bob");

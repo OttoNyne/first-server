@@ -39,10 +39,12 @@ userSchema.methods.comparePassword = function (candidate) {
   return bcrypt.compare(candidate, this.passwordHash);
 };
 
-userSchema.methods.toPublic = function () {
+// The account email is private to its owner: it's only included when the
+// caller says the viewer is the user themselves (see toPublicUser).
+userSchema.methods.toPublic = function ({ includeEmail = false } = {}) {
   return {
     id: this._id,
-    email: this.email,
+    ...(includeEmail ? { email: this.email } : {}),
     username: this.username,
     displayName: this.displayName,
     bio: this.bio,

@@ -9,9 +9,8 @@ export async function toPublicUser(user, viewerId) {
   if (!user) return null;
 
   const isSelf = viewerId && String(user._id) === String(viewerId);
-  if (isSelf || !user.isPrivate) {
-    return user.toPublic();
-  }
+  if (isSelf) return user.toPublic({ includeEmail: true });
+  if (!user.isPrivate) return user.toPublic();
 
   const isFriend = viewerId ? await areFriends(viewerId, user._id) : false;
   return isFriend ? user.toPublic() : user.toPublicRestricted();
