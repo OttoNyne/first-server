@@ -48,6 +48,8 @@ Help wanted board — visibility, blocking, offers, rate limits, email privacy)
 against a dedicated `creativeselect_test` database — never the dev database.
 The frontend has its own Vitest + Testing Library suite in the
 [CreativesSelect](https://github.com/OttoNyne/CreativesSelect) repo.
+Both run in GitHub Actions on every push and pull request (the backend
+against a throwaway MongoDB container, so CI needs no secrets).
 
 ## API
 
