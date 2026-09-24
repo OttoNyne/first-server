@@ -3,6 +3,8 @@ services:
     name: first-server
     runtime: node
     plan: free
+    # Only deploy a commit once its GitHub Actions CI run has passed.
+    autoDeployTrigger: checksPass
     buildCommand: npm install
     startCommand: npm start
     envVars:
