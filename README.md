@@ -33,6 +33,9 @@ The server listens on port 5000 (override with `PORT`) and logs
 | `CLOUDINARY_CLOUD_NAME` | yes (for uploads) | Cloudinary account cloud name |
 | `CLOUDINARY_API_KEY` | yes (for uploads) | Cloudinary API key |
 | `CLOUDINARY_API_SECRET` | yes (for uploads) | Cloudinary API secret |
+| `CLOUDFLARE_ACCOUNT_ID` | no | With the token below, turns on real AI image generation (Cloudflare Workers AI). Without both, images fall back to the mock gradient provider |
+| `CLOUDFLARE_API_TOKEN` | no | Cloudflare API token with Workers AI permission |
+| `CLOUDFLARE_IMAGE_MODEL` | no (default `@cf/black-forest-labs/flux-1-schnell`) | Which Workers AI text-to-image model to use |
 
 ## Tests
 
@@ -68,5 +71,16 @@ directly to [Cloudinary](https://cloudinary.com) and stored by URL — nothing
 is written to local disk, so files survive restarts and redeploys even on
 Render's free tier (which has an ephemeral filesystem). Sign up for a free
 Cloudinary account and set the three `CLOUDINARY_*` env vars above; without
-them, `POST /api/media/upload` will fail. AI-generated mock wallpapers are
-tiny inline SVGs returned as `data:` URIs and don't touch storage at all.
+them, `POST /api/media/upload` will fail.
+
+## AI images
+
+`POST /api/ai/image` generates a real image from the prompt using
+[Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/)
+(FLUX.1 schnell) when `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` are
+set, uploads it to Cloudinary, and returns the CDN URL. Each user is limited
+to 10 images per hour, and prompts are truncated to 500 characters. If the
+credentials aren't set, `MockAIProvider` is used instead: it turns the prompt
+into a color-gradient SVG (a `data:` URI, nothing stored) and never looks at
+what was asked for — fine for local development and tests, which need no keys.
+Text generation (bios, captions) is still the mock either way.
