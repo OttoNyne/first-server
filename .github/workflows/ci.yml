@@ -28,7 +28,7 @@ jobs:
       JWT_SECRET: ci-only-secret
       CLIENT_URL: http://localhost:5173
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 24
