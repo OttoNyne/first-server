@@ -43,8 +43,11 @@ The server listens on port 5000 (override with `PORT`) and logs
 npm test
 ```
 
-Runs the Vitest + Supertest suite (auth flows + Tasks CRUD) against a
-dedicated `creativeselect_test` database — never the dev database.
+Runs the Vitest + Supertest suite (auth flows, Tasks CRUD, and the public
+Help wanted board — visibility, blocking, offers, rate limits, email privacy)
+against a dedicated `creativeselect_test` database — never the dev database.
+The frontend has its own Vitest + Testing Library suite in the
+[CreativesSelect](https://github.com/OttoNyne/CreativesSelect) repo.
 
 ## API
 
