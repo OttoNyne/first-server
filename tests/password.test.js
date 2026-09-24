@@ -44,6 +44,20 @@ describe("changing your password", () => {
     expect((await login("old-password-1")).status).toBe(401);
   }, 30_000);
 
+  it("signs out every other session but keeps the one that changed the password", async () => {
+    const sam = await signup();
+    // A second session (e.g. another device), created before the change.
+    const other = request.agent(app);
+    await other.post("/api/auth/login").send({ email: "sam@example.com", password: "old-password-1" });
+    expect((await other.get("/api/auth/me")).status).toBe(200);
+
+    await new Promise((r) => setTimeout(r, 1100)); // JWT issue times have 1-second resolution
+    expect((await sam.put("/api/auth/password").send({ currentPassword: "old-password-1", newPassword: "brand-new-pass-2" })).status).toBe(204);
+
+    expect((await other.get("/api/auth/me")).status).toBe(401);
+    expect((await sam.get("/api/auth/me")).status).toBe(200);
+  }, 30_000);
+
   it("refuses a wrong current password without changing anything", async () => {
     const sam = await signup();
     const res = await sam.put("/api/auth/password").send({ currentPassword: "not-it", newPassword: "brand-new-pass-2" });

@@ -94,6 +94,11 @@ describe("account deletion, asset cleanup and offer replies", () => {
         kind: "upload",
       });
 
+      // A copy of her session token, taken before she deletes the account.
+      const copiedToken = (
+        await request(app).post("/api/auth/login").send({ email: "alice@example.com", password: PASSWORD })
+      ).headers["set-cookie"][0].split(";")[0];
+
       const res = await alice.agent.delete("/api/profiles/me").send({ password: PASSWORD });
       expect(res.status).toBe(204);
       expect(res.headers["set-cookie"].join(";")).toMatch(/token=;/);
@@ -111,6 +116,12 @@ describe("account deletion, asset cleanup and offer replies", () => {
       // ...Bob and his are not.
       expect(await m.User.countDocuments({ username: "bob" })).toBe(1);
       expect(await m.Post.countDocuments({ author: bob.user.id })).toBe(1);
+
+      // The copied token is worthless afterwards, even on routes that never load
+      // the user (it must not be able to create orphan data under a deleted id).
+      const replay = await request(app).post("/api/posts").set("Cookie", copiedToken).send({ content: "ghost" });
+      expect(replay.status).toBe(401);
+      expect(await m.Post.countDocuments({ content: "ghost" })).toBe(0);
 
       // The deleted account can no longer sign in, and its old session is dead.
       const login = await request(app).post("/api/auth/login").send({ email: "alice@example.com", password: PASSWORD });

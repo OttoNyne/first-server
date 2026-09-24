@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { User } from "../models/User.js";
 
 export const AUTH_COOKIE_NAME = "token";
 
@@ -45,26 +46,54 @@ export function clearAuthCookie(res) {
   });
 }
 
-export function requireAuth(req, res, next) {
+// A signed JWT alone isn't enough: it stays cryptographically valid for 7 days
+// even after the account is deleted or its password changed. So each request
+// also confirms the user still exists and that the token was issued after the
+// last password change. (One indexed lookup by _id; the payload we return is
+// still just what's in the token.)
+async function resolveSession(token) {
+  const payload = jwt.verify(token, process.env.JWT_SECRET); // throws if forged/expired
+  const user = await User.findById(payload.id).select("passwordChangedAt");
+  if (!user) return null;
+  const changedAtSeconds = user.passwordChangedAt ? Math.floor(user.passwordChangedAt.getTime() / 1000) : 0;
+  if (payload.iat < changedAtSeconds) return null;
+  return payload;
+}
+
+export async function requireAuth(req, res, next) {
   const token = req.cookies?.[AUTH_COOKIE_NAME];
   if (!token) {
     return res.status(401).json({ error: "Not authenticated" });
   }
+  let session;
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-    next();
-  } catch {
+    session = await resolveSession(token);
+  } catch (err) {
+    // A bad/expired token is the client's problem; anything else (e.g. the
+    // database being down) is ours and must not masquerade as a logout.
+    if (err?.name === "JsonWebTokenError" || err?.name === "TokenExpiredError" || err?.name === "NotBeforeError") {
+      return res.status(401).json({ error: "Invalid or expired session" });
+    }
+    return next(err);
+  }
+  if (!session) {
     return res.status(401).json({ error: "Invalid or expired session" });
   }
+  req.user = session;
+  next();
 }
 
-export function attachUserIfPresent(req, res, next) {
+export async function attachUserIfPresent(req, res, next) {
   const token = req.cookies?.[AUTH_COOKIE_NAME];
   if (token) {
     try {
-      req.user = jwt.verify(token, process.env.JWT_SECRET);
-    } catch {
-      // ignore invalid/expired token — treated as anonymous
+      const session = await resolveSession(token);
+      if (session) req.user = session;
+    } catch (err) {
+      // An invalid/expired/revoked token is treated as anonymous; a real
+      // server error is not swallowed.
+      const clientError = ["JsonWebTokenError", "TokenExpiredError", "NotBeforeError"].includes(err?.name);
+      if (!clientError) return next(err);
     }
   }
   next();

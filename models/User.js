@@ -13,6 +13,9 @@ const userSchema = new mongoose.Schema(
     wallpaperType: { type: String, enum: ["image", "video"], default: "image" },
     wallpaperPosition: { type: String, default: "50% 50%" },
     isPrivate: { type: Boolean, default: false },
+    // Sessions (JWTs) issued before this moment are rejected — set when the
+    // password changes so old/stolen sessions stop working.
+    passwordChangedAt: { type: Date, default: null },
     theme: {
       bgColor: String,
       textColor: String,

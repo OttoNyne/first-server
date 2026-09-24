@@ -118,7 +118,11 @@ authRouter.put("/password", requireAuth, async (req, res) => {
     }
 
     user.password = newPassword;
+    // Every other session (any token issued before now) stops working; this
+    // one is re-issued so the person changing their password stays signed in.
+    user.passwordChangedAt = new Date();
     await user.save();
+    setAuthCookie(res, signAuthToken(user));
     res.status(204).end();
   } catch (err) {
     console.error(err);
