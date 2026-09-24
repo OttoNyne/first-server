@@ -29,7 +29,7 @@ export async function deleteGeneratedImageIfUnused({ ownerId, url }) {
     const record = await GeneratedImage.findOne({ url, owner: ownerId });
     if (!record) return false;
     if (await isStillReferenced(url)) return false;
-    await cloudinary.uploader.destroy(record.publicId);
+    await cloudinary.uploader.destroy(record.publicId, { invalidate: true });
     await GeneratedImage.deleteMany({ url, owner: ownerId });
     return true;
   } catch (err) {

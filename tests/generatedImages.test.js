@@ -55,7 +55,7 @@ describe("deleting a post cleans up its generated image", () => {
 
     expect((await alice.agent.delete(`/api/posts/${postId}`)).status).toBe(204);
 
-    expect(destroy).toHaveBeenCalledWith(ID_A);
+    expect(destroy).toHaveBeenCalledWith(ID_A, { invalidate: true });
     expect(await GeneratedImage.countDocuments()).toBe(0);
   });
 
