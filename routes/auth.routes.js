@@ -4,6 +4,7 @@ import { User } from "../models/User.js";
 import { requireAuth, signAuthToken, setAuthCookie, clearAuthCookie } from "../middleware/auth.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { createLimiter } from "../utils/rateLimit.js";
+import { clientIp } from "../utils/clientIp.js";
 
 export const authRouter = Router();
 
@@ -35,7 +36,7 @@ const loginSchema = z.object({
 
 authRouter.post("/register", async (req, res) => {
   try {
-    if (!(await registrationsByIp.allow(req.ip))) return tooManyAttempts(res, registrationsByIp.windowSeconds);
+    if (!(await registrationsByIp.allow(clientIp(req)))) return tooManyAttempts(res, registrationsByIp.windowSeconds);
 
     const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -70,14 +71,14 @@ authRouter.post("/login", async (req, res) => {
     const { email, password } = parsed.data;
     const emailKey = email.toLowerCase();
 
-    if ((await loginFailsByEmail.isLimited(emailKey)) || (await loginFailsByIp.isLimited(req.ip))) {
+    if ((await loginFailsByEmail.isLimited(emailKey)) || (await loginFailsByIp.isLimited(clientIp(req)))) {
       return tooManyAttempts(res, loginFailsByEmail.windowSeconds);
     }
 
     const user = await User.findOne({ email });
     const matches = user ? await user.comparePassword(password) : false;
     if (!matches) {
-      await Promise.all([loginFailsByEmail.hit(emailKey), loginFailsByIp.hit(req.ip)]);
+      await Promise.all([loginFailsByEmail.hit(emailKey), loginFailsByIp.hit(clientIp(req))]);
       return res.status(401).json({ error: "Invalid email or password" });
     }
 

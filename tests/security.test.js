@@ -65,6 +65,34 @@ describe("abuse protection", () => {
     expect(over.status).toBe(429);
   }, 60_000);
 
+  describe("client IP behind the frontend proxy", () => {
+    it("limits per real client (x-vercel-forwarded-for), not per proxy address", async () => {
+      // Ten different users behind the same proxy must not share one registration budget.
+      for (let i = 0; i < 12; i++) {
+        const res = await request(app)
+          .post("/api/auth/register")
+          .set("x-vercel-forwarded-for", `203.0.113.${i}`)
+          .send({ ...account, email: `p${i}@example.com`, username: `proxied${i}` });
+        expect(res.status).toBe(201);
+      }
+    }, 60_000);
+
+    it("still caps one client that keeps arriving through the proxy", async () => {
+      for (let i = 0; i < 10; i++) {
+        const res = await request(app)
+          .post("/api/auth/register")
+          .set("x-vercel-forwarded-for", "198.51.100.7")
+          .send({ ...account, email: `q${i}@example.com`, username: `same${i}` });
+        expect(res.status).toBe(201);
+      }
+      const over = await request(app)
+        .post("/api/auth/register")
+        .set("x-vercel-forwarded-for", "198.51.100.7, 10.0.0.1")
+        .send({ ...account, email: "q11@example.com", username: "same11" });
+      expect(over.status).toBe(429);
+    }, 60_000);
+  });
+
   describe("cross-site request protection (CSRF)", () => {
     it("rejects state-changing requests from an untrusted origin", async () => {
       const res = await request(app)
