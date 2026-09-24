@@ -19,8 +19,13 @@ import { moderationRouter } from "./routes/moderation.routes.js";
 import { aiRouter } from "./routes/ai.routes.js";
 import { tracksRouter } from "./routes/tracks.routes.js";
 import { tasksRouter } from "./routes/tasks.routes.js";
+import { requireTrustedOrigin } from "./middleware/csrf.js";
 
 export const app = express();
+
+// Behind Render's proxy: trust one hop so req.ip is the real client address
+// (used for per-IP rate limits) instead of the proxy's.
+app.set("trust proxy", 1);
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(
@@ -29,6 +34,8 @@ app.use(
     credentials: true,
   })
 );
+// CSRF defense for the cross-site auth cookie (see middleware/csrf.js).
+app.use(requireTrustedOrigin);
 app.use(morgan("dev"));
 app.use(requestTimer);
 app.use(express.json());

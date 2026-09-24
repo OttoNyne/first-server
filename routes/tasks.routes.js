@@ -12,8 +12,8 @@ import { createLimiter } from "../utils/rateLimit.js";
 const POST_LIMIT = 10;
 const OFFER_LIMIT = 20;
 const WINDOW_MS = 60 * 60 * 1000;
-const allowPublicPost = createLimiter({ limit: POST_LIMIT, windowMs: WINDOW_MS });
-const allowOffer = createLimiter({ limit: OFFER_LIMIT, windowMs: WINDOW_MS });
+const publicPostLimit = createLimiter({ name: "board-post", limit: POST_LIMIT, windowMs: WINDOW_MS });
+const offerLimit = createLimiter({ name: "board-offer", limit: OFFER_LIMIT, windowMs: WINDOW_MS });
 
 export const tasksRouter = Router();
 tasksRouter.use(requireAuth);
@@ -103,7 +103,7 @@ tasksRouter.post("/:id/offer", async (req, res) => {
     return res.status(404).json({ error: "Request not found" });
   }
 
-  if (!allowOffer(req.user.id)) {
+  if (!(await offerLimit.allow(req.user.id))) {
     return res.status(429).json({ error: `Offer limit reached (${OFFER_LIMIT} per hour) — try again later` });
   }
 
@@ -137,7 +137,7 @@ tasksRouter.post("/", async (req, res) => {
   }
   const { title, description, priority, dueDate, isPublic } = req.body;
   // Only public requests reach other people, so only those are capped.
-  if (isPublic === true && !allowPublicPost(req.user.id)) {
+  if (isPublic === true && !(await publicPostLimit.allow(req.user.id))) {
     return res.status(429).json({ error: `Board post limit reached (${POST_LIMIT} per hour) — try again later` });
   }
   const task = await Task.create({ title, description, priority, dueDate, isPublic, owner: req.user.id });

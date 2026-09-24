@@ -23,14 +23,14 @@ function handleAIError(err, res) {
 const IMAGE_LIMIT = 10;
 const TEXT_LIMIT = 30;
 const WINDOW_MS = 60 * 60 * 1000;
-const allowImage = createLimiter({ limit: IMAGE_LIMIT, windowMs: WINDOW_MS });
-const allowText = createLimiter({ limit: TEXT_LIMIT, windowMs: WINDOW_MS });
+const imageLimit = createLimiter({ name: "ai-image", limit: IMAGE_LIMIT, windowMs: WINDOW_MS });
+const textLimit = createLimiter({ name: "ai-text", limit: TEXT_LIMIT, windowMs: WINDOW_MS });
 
 aiRouter.post("/text", async (req, res) => {
   if (!req.body.prompt || typeof req.body.prompt !== "string") {
     return res.status(400).json({ error: "prompt is required" });
   }
-  if (isRealImageProviderConfigured() && !allowText(req.user.id)) {
+  if (isRealImageProviderConfigured() && !(await textLimit.allow(req.user.id))) {
     return res.status(429).json({ error: `Text limit reached (${TEXT_LIMIT} per hour) — try again later` });
   }
   try {
@@ -45,7 +45,7 @@ aiRouter.post("/image", async (req, res) => {
   if (!req.body.prompt || typeof req.body.prompt !== "string") {
     return res.status(400).json({ error: "prompt is required" });
   }
-  if (isRealImageProviderConfigured() && !allowImage(req.user.id)) {
+  if (isRealImageProviderConfigured() && !(await imageLimit.allow(req.user.id))) {
     return res.status(429).json({ error: `Image limit reached (${IMAGE_LIMIT} per hour) — try again later` });
   }
   try {

@@ -3,8 +3,23 @@ import { z } from "zod";
 import { User } from "../models/User.js";
 import { requireAuth, signAuthToken, setAuthCookie, clearAuthCookie } from "../middleware/auth.js";
 import { toPublicUser } from "../utils/serialize.js";
+import { createLimiter } from "../utils/rateLimit.js";
 
 export const authRouter = Router();
+
+// Brute-force / abuse protection. Login counts only FAILED attempts, per email
+// (stops guessing one account from many IPs) and per IP (stops one client
+// trying many accounts), so normal use never burns the budget. Registration
+// is capped per IP.
+const FIFTEEN_MIN = 15 * 60 * 1000;
+const loginFailsByEmail = createLimiter({ name: "login-email", limit: 10, windowMs: FIFTEEN_MIN });
+const loginFailsByIp = createLimiter({ name: "login-ip", limit: 30, windowMs: FIFTEEN_MIN });
+const registrationsByIp = createLimiter({ name: "register-ip", limit: 10, windowMs: 60 * 60 * 1000 });
+
+function tooManyAttempts(res, seconds) {
+  res.set("Retry-After", String(seconds));
+  return res.status(429).json({ error: "Too many attempts — please wait a few minutes and try again" });
+}
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -20,6 +35,8 @@ const loginSchema = z.object({
 
 authRouter.post("/register", async (req, res) => {
   try {
+    if (!(await registrationsByIp.allow(req.ip))) return tooManyAttempts(res, registrationsByIp.windowSeconds);
+
     const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -51,13 +68,16 @@ authRouter.post("/login", async (req, res) => {
       return res.status(400).json({ error: parsed.error.issues[0].message });
     }
     const { email, password } = parsed.data;
+    const emailKey = email.toLowerCase();
+
+    if ((await loginFailsByEmail.isLimited(emailKey)) || (await loginFailsByIp.isLimited(req.ip))) {
+      return tooManyAttempts(res, loginFailsByEmail.windowSeconds);
+    }
 
     const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(401).json({ error: "Invalid email or password" });
-    }
-    const matches = await user.comparePassword(password);
+    const matches = user ? await user.comparePassword(password) : false;
     if (!matches) {
+      await Promise.all([loginFailsByEmail.hit(emailKey), loginFailsByIp.hit(req.ip)]);
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
