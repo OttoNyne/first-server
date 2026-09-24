@@ -1,0 +1,25 @@
+name: Keep API warm
+
+# Render's free tier puts the API to sleep after ~15 minutes without traffic,
+# and the first request afterwards takes ~50 seconds. Pinging the health
+# endpoint every 10 minutes keeps it awake (well within the free plan's 750
+# instance-hours a month for one always-on service). GitHub can delay
+# scheduled runs by a few minutes, so 10 minutes leaves a comfortable margin.
+# Note: GitHub disables scheduled workflows in a repo with no activity for 60
+# days — any commit re-enables them.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping /api/health (fails if the database is disconnected)
+        run: curl -fsS --retry 3 --retry-delay 10 --max-time 90 https://first-server-2y0v.onrender.com/api/health
