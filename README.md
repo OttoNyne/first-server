@@ -43,7 +43,7 @@ The server listens on port 5000 (override with `PORT`) and logs
 npm test
 ```
 
-Runs the Vitest + Supertest suite (112 tests: auth incl. throttling/CSRF/session
+Runs the Vitest + Supertest suite (119 tests: auth incl. throttling/CSRF/session
 revocation, Tasks CRUD and the Help wanted board, friends, blocking, groups, media,
 profile editing, portfolio reactions and videos, account deletion, password change, uploads,
 stored-asset cleanup)
