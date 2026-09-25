@@ -43,9 +43,9 @@ The server listens on port 5000 (override with `PORT`) and logs
 npm test
 ```
 
-Runs the Vitest + Supertest suite (71 tests: auth incl. throttling/CSRF/session
+Runs the Vitest + Supertest suite (80 tests: auth incl. throttling/CSRF/session
 revocation, Tasks CRUD and the Help wanted board, friends, blocking, groups, media,
-account deletion, password change, stored-asset cleanup)
+account deletion, password change, uploads, stored-asset cleanup)
 against a dedicated `creativeselect_test` database — never the dev database.
 The frontend has its own Vitest + Testing Library suite in the
 [CreativesSelect](https://github.com/OttoNyne/CreativesSelect) repo.
@@ -84,8 +84,12 @@ them, `POST /api/media/upload` will fail.
 - Login counts failed attempts per email (10 / 15 min) and per IP (30 / 15 min);
   registration is capped at 10 per IP per hour. All rate limits are stored in MongoDB
   (`RateLimitHit`, TTL-indexed), so they survive restarts and are shared across instances.
-- State-changing requests from an `Origin` other than `CLIENT_URL` get `403` (CSRF
-  defense for the cross-site cookie). Set `CLIENT_URL` to the exact frontend origin.
+- The session cookie is `HttpOnly`, `Secure` (production) and `SameSite=Lax`. In production the
+  frontend proxies `/api/*` to this server (see the frontend's `vercel.json`), so the cookie is
+  first-party — iOS/Safari blocks cross-site cookies. Per-IP limits read Vercel's
+  `x-vercel-forwarded-for` (`utils/clientIp.js`).
+- State-changing requests from an `Origin` other than `CLIENT_URL` get `403` (defense in depth on
+  top of `SameSite=Lax`). Set `CLIENT_URL` to the exact frontend origin (the Vercel site).
 - `requireAuth` re-checks the user on every request, so deleting an account or
   changing a password immediately invalidates old tokens.
 - `PUT /api/auth/password` and `DELETE /api/profiles/me` both require the current password.
