@@ -15,5 +15,10 @@ export default defineConfig({
     // connection, but not always on a slower one. Bumped rather than left to
     // fail intermittently.
     hookTimeout: 20000,
+    // Many tests sign up several users (bcrypt, cost 12) and make dozens of
+    // round trips to the remote test database, which puts them close to
+    // Vitest's default 5 s limit — a slow network day made seven of them time
+    // out despite passing. Same reasoning as hookTimeout above.
+    testTimeout: 30000,
   },
 });
