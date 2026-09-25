@@ -43,9 +43,10 @@ The server listens on port 5000 (override with `PORT`) and logs
 npm test
 ```
 
-Runs the Vitest + Supertest suite (80 tests: auth incl. throttling/CSRF/session
+Runs the Vitest + Supertest suite (112 tests: auth incl. throttling/CSRF/session
 revocation, Tasks CRUD and the Help wanted board, friends, blocking, groups, media,
-account deletion, password change, uploads, stored-asset cleanup)
+profile editing, portfolio reactions and videos, account deletion, password change, uploads,
+stored-asset cleanup)
 against a dedicated `creativeselect_test` database — never the dev database.
 The frontend has its own Vitest + Testing Library suite in the
 [CreativesSelect](https://github.com/OttoNyne/CreativesSelect) repo.
