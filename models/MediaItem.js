@@ -7,6 +7,10 @@ const mediaItemSchema = new mongoose.Schema(
     type: { type: String, enum: ["image", "audio", "video", "embed"], required: true },
     caption: { type: String, default: null },
     isAiImage: { type: Boolean, default: false },
+    // Videos: where playback begins (a linked video plays as a 30-second window
+    // from here) and, for uploaded videos, the measured length in seconds.
+    startSeconds: { type: Number, default: 0, min: 0 },
+    durationSeconds: { type: Number },
   },
   { timestamps: true }
 );

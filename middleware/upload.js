@@ -14,7 +14,9 @@ const IMAGE_MIME = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 const PURPOSE_MIME = {
   avatars: IMAGE_MIME,
   wallpapers: [...IMAGE_MIME, "video/mp4", "video/webm"],
-  portfolio: IMAGE_MIME,
+  // Portfolio videos: the 30-second limit is enforced after upload (the
+  // duration is only known once Cloudinary has the file) — see routes/media.
+  portfolio: [...IMAGE_MIME, "video/mp4", "video/webm", "video/quicktime"],
   tracks: ["audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg"],
 };
 
@@ -51,7 +53,7 @@ class CloudinaryStorage {
       },
       (err, result) => {
         if (err) return cb(toUploadError(err));
-        cb(null, { path: result.secure_url, filename: result.public_id, size: result.bytes });
+        cb(null, { path: result.secure_url, filename: result.public_id, size: result.bytes, duration: result.duration });
       }
     );
     file.stream.pipe(uploadStream);

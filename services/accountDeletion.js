@@ -14,6 +14,7 @@ import { Block } from "../models/Block.js";
 import { Report } from "../models/Report.js";
 import { Task } from "../models/Task.js";
 import { UsernameHistory } from "../models/UsernameHistory.js";
+import { MediaReaction } from "../models/MediaReaction.js";
 import { deleteAllStoredAssets } from "./storedAssets.js";
 
 // Groups the user created: an empty group is deleted; otherwise it is handed
@@ -57,6 +58,9 @@ export async function deleteAccount(userId) {
   await TopFriend.deleteMany({ $or: [{ owner: id }, { target: id }] });
   await GroupMembership.deleteMany({ user: id });
   await Block.deleteMany({ $or: [{ blocker: id }, { blocked: id }] });
+  // Reactions on their pictures, and reactions they left on others'.
+  const mediaIds = (await MediaItem.find({ owner: id }).select("_id")).map((m) => m._id);
+  await MediaReaction.deleteMany({ $or: [{ user: id }, { item: { $in: mediaIds } }] });
   await MediaItem.deleteMany({ owner: id });
   await Track.deleteMany({ owner: id });
   await Task.deleteMany({ owner: id });
