@@ -49,7 +49,9 @@ profile editing, portfolio reactions and videos, account deletion, password chan
 stored-asset cleanup)
 against a dedicated `creativeselect_test` database — never the dev database.
 The frontend has its own Vitest + Testing Library suite in the
-[CreativesSelect](https://github.com/OttoNyne/CreativesSelect) repo.
+[CreativesSelect](https://github.com/OttoNyne/CreativesSelect) repo. CI also runs that repo's browser
+end-to-end suite (Playwright: Chrome, Safari's engine, iPhone-sized) against this commit of the API,
+so a backend change that breaks the UI is caught before it deploys.
 Both run in GitHub Actions on every push and pull request (the backend
 against a throwaway MongoDB container, so CI needs no secrets).
 
