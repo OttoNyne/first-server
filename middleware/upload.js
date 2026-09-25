@@ -22,6 +22,20 @@ function purposeFor(req) {
   return ALLOWED_PURPOSES.includes(req.query.purpose) ? req.query.purpose : "portfolio";
 }
 
+// Cloudinary rejects a file over its plan limit (10 MB for images on the free
+// plan) with an SDK error. Left alone that surfaces as a generic 500; turn it
+// into a clear 413, and any other storage failure into a 502.
+function toUploadError(err) {
+  const tooLarge = /too large/i.test(err?.message ?? "");
+  const out = new Error(
+    tooLarge ? "That file is too large to upload — images can be up to 10 MB." : "Couldn't store that file, please try again."
+  );
+  out.name = "UploadRejected";
+  out.status = tooLarge ? 413 : 502;
+  if (!tooLarge) console.error("Cloudinary upload failed:", err?.message ?? err);
+  return out;
+}
+
 // A minimal multer StorageEngine implementation (just _handleFile/_removeFile)
 // instead of the `multer-storage-cloudinary` package — its latest release
 // pins a peer dependency on cloudinary@^1.x, which conflicts with the
@@ -36,7 +50,7 @@ class CloudinaryStorage {
         public_id: crypto.randomUUID(),
       },
       (err, result) => {
-        if (err) return cb(err);
+        if (err) return cb(toUploadError(err));
         cb(null, { path: result.secure_url, filename: result.public_id, size: result.bytes });
       }
     );

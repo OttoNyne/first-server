@@ -15,14 +15,13 @@ export function setAuthCookie(res, token) {
   const isProduction = process.env.NODE_ENV === "production";
   res.cookie(AUTH_COOKIE_NAME, token, {
     httpOnly: true,
-    // In dev, frontend/backend are different ports on localhost — same
-    // registrable domain, so "lax" already sends the cookie cross-port.
-    // In production, they're on genuinely different domains (Render vs
-    // Vercel) — a cross-site fetch only carries the cookie if it's
-    // SameSite=None, which itself requires Secure (HTTPS, true on both
-    // platforms). Without this, login would silently "succeed" but no
-    // protected route would ever see the cookie.
-    sameSite: isProduction ? "none" : "lax",
+    // Lax everywhere. In dev the frontend and API are different ports on
+    // localhost (same site). In production the frontend proxies /api/* to this
+    // server (see the frontend's vercel.json), so the browser only ever talks
+    // to one domain and the cookie is first-party — which iOS/Safari requires
+    // (it blocks cookies from a different site than the page even with
+    // SameSite=None) and which lets us use the stricter Lax setting.
+    sameSite: "lax",
     secure: isProduction,
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: "/",
@@ -34,13 +33,13 @@ export function clearAuthCookie(res) {
   // A clearing Set-Cookie must repeat the same sameSite/secure attributes
   // the cookie was originally set with — omitting them (res.clearCookie's
   // default) produces a directive the browser doesn't recognize as
-  // matching a SameSite=None; Secure cookie in production, so it's
-  // silently ignored and the session cookie never actually clears.
-  // Reproduced live: /logout returned 204, but the original cookie stayed
-  // valid and the user stayed logged in.
+  // matching a Secure cookie in production, so it's silently ignored and
+  // the session cookie never actually clears. Reproduced live: /logout
+  // returned 204, but the original cookie stayed valid and the user stayed
+  // logged in.
   res.clearCookie(AUTH_COOKIE_NAME, {
     httpOnly: true,
-    sameSite: isProduction ? "none" : "lax",
+    sameSite: "lax",
     secure: isProduction,
     path: "/",
   });

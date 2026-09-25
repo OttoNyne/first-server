@@ -65,6 +65,28 @@ describe("abuse protection", () => {
     expect(over.status).toBe(429);
   }, 60_000);
 
+  describe("session cookie attributes", () => {
+    it("is HttpOnly, SameSite=Lax and Secure in production, on login and when cleared", async () => {
+      const previous = process.env.NODE_ENV;
+      process.env.NODE_ENV = "production";
+      try {
+        const reg = await request(app).post("/api/auth/register").send(account);
+        const set = reg.headers["set-cookie"].join(";");
+        expect(set).toMatch(/HttpOnly/i);
+        expect(set).toMatch(/SameSite=Lax/i);
+        expect(set).toMatch(/Secure/i);
+        expect(set).not.toMatch(/SameSite=None/i);
+
+        const out = await request(app).post("/api/auth/logout");
+        const cleared = out.headers["set-cookie"].join(";");
+        expect(cleared).toMatch(/SameSite=Lax/i);
+        expect(cleared).toMatch(/Secure/i);
+      } finally {
+        process.env.NODE_ENV = previous;
+      }
+    }, 30_000);
+  });
+
   describe("client IP behind the frontend proxy", () => {
     it("limits per real client (x-vercel-forwarded-for), not per proxy address", async () => {
       // Ten different users behind the same proxy must not share one registration budget.

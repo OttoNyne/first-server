@@ -14,6 +14,11 @@ export function errorHandler(err, req, res, next) {
     const firstError = Object.values(err.errors)[0];
     return res.status(400).json({ error: firstError?.message || "Validation failed" });
   }
+  // Upload storage (Cloudinary) rejected the file or was unavailable — the
+  // message was written for the user (see toUploadError in upload.js).
+  if (err.name === "UploadRejected") {
+    return res.status(err.status).json({ error: err.message });
+  }
   // Multer rejects an oversized/malformed upload by calling next(err) itself
   // — same reasoning as CastError above, a client mistake, not a server one.
   if (err.name === "MulterError") {
