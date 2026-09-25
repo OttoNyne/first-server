@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
+import { isStorageUnavailable, logStorageProblem, STORAGE_UNAVAILABLE_MESSAGE } from "../utils/storageErrors.js";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -29,12 +30,17 @@ function purposeFor(req) {
 // into a clear 413, and any other storage failure into a 502.
 function toUploadError(err) {
   const tooLarge = /too large/i.test(err?.message ?? "");
+  const unavailable = !tooLarge && isStorageUnavailable(err);
   const out = new Error(
-    tooLarge ? "That file is too large to upload — images can be up to 10 MB." : "Couldn't store that file, please try again."
+    tooLarge
+      ? "That file is too large to upload — images can be up to 10 MB."
+      : unavailable
+        ? STORAGE_UNAVAILABLE_MESSAGE
+        : "Couldn't store that file, please try again."
   );
   out.name = "UploadRejected";
-  out.status = tooLarge ? 413 : 502;
-  if (!tooLarge) console.error("Cloudinary upload failed:", err?.message ?? err);
+  out.status = tooLarge ? 413 : unavailable ? 503 : 502;
+  if (!tooLarge) logStorageProblem("upload", err);
   return out;
 }
 

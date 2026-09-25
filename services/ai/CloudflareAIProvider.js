@@ -1,5 +1,6 @@
 import { v2 as cloudinary } from "cloudinary";
 import { MockAIProvider } from "./MockAIProvider.js";
+import { isStorageUnavailable, logStorageProblem, STORAGE_UNAVAILABLE_MESSAGE } from "../../utils/storageErrors.js";
 
 const MAX_PROMPT_CHARS = 500;
 
@@ -109,7 +110,8 @@ export class CloudflareAIProvider extends MockAIProvider {
       });
       return { url: uploaded.secure_url, publicId: uploaded.public_id };
     } catch (err) {
-      console.error("Cloudinary upload of generated image failed:", err);
+      logStorageProblem("upload of a generated image", err);
+      if (isStorageUnavailable(err)) throw aiError(STORAGE_UNAVAILABLE_MESSAGE, 503);
       throw aiError("Couldn't save the generated image, try again");
     }
   }

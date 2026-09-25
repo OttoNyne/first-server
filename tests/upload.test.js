@@ -112,6 +112,17 @@ describe("POST /api/media/upload", () => {
     expect(await StoredAsset.countDocuments()).toBe(0);
   });
 
+  it("reports a storage account that refuses uploads as 503 (retrying can't help), not as a generic failure", async () => {
+    for (const http_code of [401, 403, 420]) {
+      nextResult = () => ({ error: { http_code, message: "action is disabled for some-cloud" } });
+      const res = await send();
+      expect(res.status).toBe(503);
+      expect(res.body.error).toMatch(/temporarily unavailable/i);
+      expect(JSON.stringify(res.body)).not.toMatch(/some-cloud|disabled for/);
+    }
+    expect(await StoredAsset.countDocuments()).toBe(0);
+  });
+
   it("reports other storage failures as a 502 without leaking internals", async () => {
     nextResult = () => ({ error: { http_code: 500, message: "secret-internal-detail: api_key rejected" } });
     const res = await send();
