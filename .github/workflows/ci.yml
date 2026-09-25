@@ -37,3 +37,60 @@ jobs:
       - run: npm test
       # Fails the build on known high/critical vulnerabilities in dependencies.
       - run: npm audit --audit-level=high
+
+  # The same real-browser suite as the frontend repo (Chrome, Safari's engine
+  # WebKit, and an iPhone-sized WebKit), run against THIS commit of the API, so
+  # a backend change that breaks the UI is caught before it deploys.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: OttoNyne/CreativesSelect
+          path: web
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install and start the API
+        env:
+          MONGODB_URI: mongodb://localhost:27017/creativeselect_e2e
+          JWT_SECRET: e2e-only-secret
+          CLIENT_URL: http://localhost:4173
+          PORT: "5000"
+        run: |
+          npm ci
+          nohup node server.js > api.log 2>&1 &
+          for i in $(seq 1 40); do curl -sf http://localhost:5000/api/health && break; sleep 1; done
+          curl -sf http://localhost:5000/api/health
+      - name: Install the frontend
+        working-directory: web/frontend
+        run: npm ci
+      - name: Install browsers
+        working-directory: web/frontend
+        run: npx playwright install --with-deps chromium webkit
+      - name: Browser tests
+        working-directory: web/frontend
+        run: npx playwright test
+      - name: Keep the report and API log if it failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure
+          path: |
+            web/frontend/playwright-report
+            web/frontend/test-results
+            api.log
+          retention-days: 7
