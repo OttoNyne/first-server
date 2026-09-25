@@ -13,6 +13,7 @@ import { Notification } from "../models/Notification.js";
 import { Block } from "../models/Block.js";
 import { Report } from "../models/Report.js";
 import { Task } from "../models/Task.js";
+import { UsernameHistory } from "../models/UsernameHistory.js";
 import { deleteAllStoredAssets } from "./storedAssets.js";
 
 // Groups the user created: an empty group is deleted; otherwise it is handed
@@ -59,6 +60,7 @@ export async function deleteAccount(userId) {
   await MediaItem.deleteMany({ owner: id });
   await Track.deleteMany({ owner: id });
   await Task.deleteMany({ owner: id });
+  await UsernameHistory.deleteMany({ user: id });
 
   // Notifications addressed to them, and ones they caused (actorId was stored
   // as either a string or an ObjectId depending on the route that created it).

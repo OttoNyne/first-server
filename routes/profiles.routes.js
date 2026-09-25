@@ -4,7 +4,10 @@ import { TopFriend } from "../models/TopFriend.js";
 import { ProfileComment } from "../models/ProfileComment.js";
 import { Track } from "../models/Track.js";
 import { Notification } from "../models/Notification.js";
-import { requireAuth, attachUserIfPresent, clearAuthCookie } from "../middleware/auth.js";
+import { requireAuth, attachUserIfPresent, clearAuthCookie, setAuthCookie, signAuthToken } from "../middleware/auth.js";
+import { Friendship } from "../models/Friendship.js";
+import { UsernameHistory } from "../models/UsernameHistory.js";
+import { usernameSchema, displayNameSchema } from "../utils/username.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { deleteAccount } from "../services/accountDeletion.js";
 import { deleteStoredAssetIfUnused } from "../services/storedAssets.js";
@@ -27,9 +30,17 @@ profilesRouter.get("/", requireAuth, async (req, res) => {
 profilesRouter.patch("/me", requireAuth, async (req, res) => {
   const user = await User.findById(req.user.id);
   const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, isPrivate, theme } = req.body;
+  if (displayName !== undefined) {
+    const parsedName = displayNameSchema.safeParse(displayName);
+    if (!parsedName.success) return res.status(400).json({ error: parsedName.error.issues[0].message });
+    req.body.displayName = parsedName.data;
+  }
+  if (bio !== undefined && bio !== null && (typeof bio !== "string" || bio.length > 1000)) {
+    return res.status(400).json({ error: "Bio must be text of 1000 characters or fewer" });
+  }
   const replaced = [];
 
-  if (displayName !== undefined) user.displayName = displayName;
+  if (displayName !== undefined) user.displayName = req.body.displayName;
   if (bio !== undefined) user.bio = bio;
   if (avatarUrl !== undefined) {
     if (user.avatarUrl && user.avatarUrl !== avatarUrl) replaced.push(user.avatarUrl);
@@ -75,6 +86,11 @@ profilesRouter.delete("/me", requireAuth, async (req, res) => {
   res.status(204).end();
 });
 
+async function topFriendsFor(ownerId, viewerId) {
+  const rows = await TopFriend.find({ owner: ownerId }).sort("position").populate("target");
+  return Promise.all(rows.filter((tf) => tf.target).map((tf) => toPublicUser(tf.target, viewerId)));
+}
+
 profilesRouter.put("/me/top-friends", requireAuth, async (req, res) => {
   // req.body.usernames must be an array of strings — a string or number here
   // still has .slice() (or neither), so an unvalidated non-array shape
@@ -83,6 +99,13 @@ profilesRouter.put("/me/top-friends", requireAuth, async (req, res) => {
   const usernames = rawUsernames.filter((u) => typeof u === "string").slice(0, 8);
   const users = await User.find({ username: { $in: usernames } });
   const byUsername = new Map(users.map((u) => [u.username, u]));
+
+  // Only accepted friends can be top friends.
+  const friendships = await Friendship.find({
+    status: "accepted",
+    $or: [{ requester: req.user.id }, { addressee: req.user.id }],
+  });
+  const friendIds = new Set(friendships.map((fr) => (String(fr.requester) === req.user.id ? String(fr.addressee) : String(fr.requester))));
 
   await TopFriend.deleteMany({ owner: req.user.id });
   // Dedupe by resolved target id, not the raw username string — the unique
@@ -93,13 +116,53 @@ profilesRouter.put("/me/top-friends", requireAuth, async (req, res) => {
   const docs = [];
   for (const username of usernames) {
     const target = byUsername.get(username);
-    if (!target || seenTargets.has(String(target._id))) continue;
+    if (!target || !friendIds.has(String(target._id)) || seenTargets.has(String(target._id))) continue;
     seenTargets.add(String(target._id));
     docs.push({ owner: req.user.id, target: target._id, position: docs.length });
   }
   if (docs.length) await TopFriend.insertMany(docs);
 
-  res.status(204).end();
+  res.json({ topFriends: await topFriendsFor(req.user.id, req.user.id) });
+});
+
+// Change your username. Usernames are public URLs, so: URL-safe characters only,
+// unique (case-insensitively), limited to 3 changes a day, and the name you give up
+// stays reserved for you for 30 days so nobody can instantly take it over.
+const usernameChanges = createLimiter({ name: "username-change", limit: 3, windowMs: 24 * 60 * 60 * 1000 });
+
+profilesRouter.put("/me/username", requireAuth, async (req, res) => {
+  const parsed = usernameSchema.safeParse(req.body?.username);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+  const wanted = parsed.data.toLowerCase();
+
+  const user = await User.findById(req.user.id);
+  if (!user) return res.status(401).json({ error: "Not authenticated" });
+  if (wanted === user.username) return res.json({ user: await toPublicUser(user, req.user.id) });
+
+  if (await usernameChanges.isLimited(req.user.id)) {
+    return res.status(429).json({ error: "You can change your username 3 times a day — try again tomorrow" });
+  }
+  if (await User.exists({ username: wanted })) {
+    return res.status(409).json({ error: "That username is already taken" });
+  }
+  const reserved = await UsernameHistory.findOne({ username: wanted, user: { $ne: user._id } });
+  if (reserved) {
+    return res.status(409).json({ error: "That username was recently used by someone else and isn't available yet" });
+  }
+
+  const previous = user.username;
+  user.username = wanted;
+  try {
+    await user.save();
+  } catch (err) {
+    if (err?.code === 11000) return res.status(409).json({ error: "That username is already taken" });
+    throw err;
+  }
+  await usernameChanges.hit(req.user.id);
+  await UsernameHistory.create({ username: previous, user: user._id, expireAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) });
+  // The session token carries the username; re-issue it so it's current.
+  setAuthCookie(res, signAuthToken(user));
+  res.json({ user: await toPublicUser(user, req.user.id) });
 });
 
 profilesRouter.delete("/comments/:commentId", requireAuth, async (req, res) => {
@@ -124,10 +187,7 @@ profilesRouter.get("/:username", attachUserIfPresent, async (req, res) => {
 profilesRouter.get("/:username/top-friends", attachUserIfPresent, async (req, res) => {
   try {
     const user = await getProfileForViewer(req.params.username, req.user?.id);
-    const topFriends = await TopFriend.find({ owner: user._id }).sort("position").populate("target");
-    res.json({
-      topFriends: await Promise.all(topFriends.map((tf) => toPublicUser(tf.target, req.user?.id))),
-    });
+    res.json({ topFriends: await topFriendsFor(user._id, req.user?.id) });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }

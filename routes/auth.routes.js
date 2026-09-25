@@ -5,6 +5,8 @@ import { requireAuth, signAuthToken, setAuthCookie, clearAuthCookie } from "../m
 import { toPublicUser } from "../utils/serialize.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { clientIp } from "../utils/clientIp.js";
+import { usernameSchema } from "../utils/username.js";
+import { UsernameHistory } from "../models/UsernameHistory.js";
 
 export const authRouter = Router();
 
@@ -24,7 +26,7 @@ function tooManyAttempts(res, seconds) {
 
 const registerSchema = z.object({
   email: z.string().email(),
-  username: z.string().min(3).max(30),
+  username: usernameSchema,
   password: z.string().min(8).max(72),
   displayName: z.string().min(1).max(80),
 });
@@ -44,8 +46,8 @@ authRouter.post("/register", async (req, res) => {
     }
     const { email, username, password, displayName } = parsed.data;
 
-    const existing = await User.findOne({ $or: [{ email }, { username }] });
-    if (existing) {
+    const existing = await User.findOne({ $or: [{ email }, { username: username.toLowerCase() }] });
+    if (existing || (await UsernameHistory.exists({ username: username.toLowerCase() }))) {
       return res.status(409).json({ error: "Email or username already taken" });
     }
 
