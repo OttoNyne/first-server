@@ -1,6 +1,11 @@
 import { Router } from "express";
+import mongoose from "mongoose";
 import { Group } from "../models/Group.js";
 import { GroupMembership } from "../models/GroupMembership.js";
+import { GroupMessage, MAX_GROUP_MESSAGE_LENGTH } from "../models/GroupMessage.js";
+import { Block } from "../models/Block.js";
+import { User } from "../models/User.js";
+import { createLimiter } from "../utils/rateLimit.js";
 import { requireAuth } from "../middleware/auth.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { escapeRegex } from "../utils/regex.js";
@@ -83,4 +88,88 @@ groupsRouter.get("/:id/members", async (req, res) => {
       }))
     ),
   });
+});
+
+// ---- Group chat -----------------------------------------------------------
+// Members only: reading and writing both require membership, so leaving a
+// group ends access. People you've blocked (or who blocked you) are left out
+// of what you see, the same as everywhere else in the app.
+const GROUP_CHAT_PAGE = 50;
+const groupChatLimiter = createLimiter({ name: "group-chat", limit: 60, windowMs: 10 * 60 * 1000 });
+
+async function requireMembership(req, res) {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    res.status(404).json({ error: "Group not found" });
+    return null;
+  }
+  const membership = await GroupMembership.findOne({ group: req.params.id, user: req.user.id });
+  if (!membership) {
+    // 404 for a group that doesn't exist, 403 for one you haven't joined
+    const exists = await Group.exists({ _id: req.params.id });
+    res.status(exists ? 403 : 404).json({ error: exists ? "Join this group to use its chat" : "Group not found" });
+    return null;
+  }
+  return membership;
+}
+
+async function blockedWith(viewerId) {
+  const blocks = await Block.find({ $or: [{ blocker: viewerId }, { blocked: viewerId }] });
+  return new Set(blocks.map((b) => String(b.blocker) === String(viewerId) ? String(b.blocked) : String(b.blocker)));
+}
+
+async function toGroupMessages(messages, viewerId) {
+  const senders = await User.find({ _id: { $in: [...new Set(messages.map((m) => String(m.sender)))] } });
+  const byId = new Map(senders.map((u) => [String(u._id), u]));
+  const publicById = new Map();
+  for (const [id, u] of byId) publicById.set(id, await toPublicUser(u, viewerId));
+  return messages.map((m) => ({
+    id: m._id,
+    groupId: m.group,
+    senderId: m.sender,
+    sender: publicById.get(String(m.sender)) ?? null,
+    mine: String(m.sender) === String(viewerId),
+    body: m.body,
+    createdAt: m.createdAt,
+  }));
+}
+
+groupsRouter.get("/:id/messages", async (req, res) => {
+  if (!(await requireMembership(req, res))) return;
+  const blocked = await blockedWith(req.user.id);
+  const filter = { group: req.params.id, sender: { $nin: [...blocked] } };
+  if (typeof req.query.before === "string" && mongoose.isValidObjectId(req.query.before)) {
+    filter._id = { $lt: req.query.before };
+  }
+  const newestFirst = await GroupMessage.find(filter).sort({ _id: -1 }).limit(GROUP_CHAT_PAGE + 1);
+  const hasMore = newestFirst.length > GROUP_CHAT_PAGE;
+  const page = newestFirst.slice(0, GROUP_CHAT_PAGE).reverse();
+  res.json({ messages: await toGroupMessages(page, req.user.id), hasMore });
+});
+
+groupsRouter.post("/:id/messages", async (req, res) => {
+  if (!(await requireMembership(req, res))) return;
+  const body = typeof req.body?.body === "string" ? req.body.body.trim() : "";
+  if (!body) return res.status(400).json({ error: "Write something to send" });
+  if (body.length > MAX_GROUP_MESSAGE_LENGTH) {
+    return res.status(400).json({ error: `Messages can be up to ${MAX_GROUP_MESSAGE_LENGTH} characters` });
+  }
+  if (!(await groupChatLimiter.allow(req.user.id))) {
+    res.set("Retry-After", String(groupChatLimiter.windowSeconds));
+    return res.status(429).json({ error: "You're sending messages too fast — try again in a few minutes." });
+  }
+  const message = await GroupMessage.create({ group: req.params.id, sender: req.user.id, body });
+  const [out] = await toGroupMessages([message], req.user.id);
+  res.status(201).json({ message: out });
+});
+
+// The sender, or an admin of the group, can remove a message (for everyone).
+groupsRouter.delete("/:id/messages/:messageId", async (req, res) => {
+  const membership = await requireMembership(req, res);
+  if (!membership) return;
+  if (!mongoose.isValidObjectId(req.params.messageId)) return res.status(404).json({ error: "Message not found" });
+  const message = await GroupMessage.findOne({ _id: req.params.messageId, group: req.params.id });
+  const allowed = message && (String(message.sender) === req.user.id || membership.role === "admin");
+  if (!allowed) return res.status(404).json({ error: "Message not found" });
+  await message.deleteOne();
+  res.status(204).end();
 });

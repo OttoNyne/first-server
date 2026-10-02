@@ -16,6 +16,8 @@ import { Task } from "../models/Task.js";
 import { UsernameHistory } from "../models/UsernameHistory.js";
 import { MediaReaction } from "../models/MediaReaction.js";
 import { Message } from "../models/Message.js";
+import { GroupMessage } from "../models/GroupMessage.js";
+import { PasswordReset } from "../models/PasswordReset.js";
 import { deleteAllStoredAssets } from "./storedAssets.js";
 
 // Groups the user created: an empty group is deleted; otherwise it is handed
@@ -27,6 +29,7 @@ async function releaseGroups(userId) {
     const successor = await GroupMembership.findOne({ group: group._id, user: { $ne: userId } }).sort("joinedAt");
     if (!successor) {
       await GroupMembership.deleteMany({ group: group._id });
+      await GroupMessage.deleteMany({ group: group._id });
       await group.deleteOne();
       continue;
     }
@@ -67,6 +70,8 @@ export async function deleteAccount(userId) {
   await Task.deleteMany({ owner: id });
   // Messages they sent or received (the other person's copy is the same document).
   await Message.deleteMany({ $or: [{ sender: id }, { recipient: id }] });
+  await GroupMessage.deleteMany({ sender: id });
+  await PasswordReset.deleteMany({ user: id });
   await UsernameHistory.deleteMany({ user: id });
 
   // Notifications addressed to them, and ones they caused (actorId was stored

@@ -7,6 +7,9 @@ import { createLimiter } from "../utils/rateLimit.js";
 import { clientIp } from "../utils/clientIp.js";
 import { usernameSchema } from "../utils/username.js";
 import { UsernameHistory } from "../models/UsernameHistory.js";
+import { PasswordReset } from "../models/PasswordReset.js";
+import { sendMail, mailAvailable } from "../utils/mailer.js";
+import { createHash, randomBytes } from "node:crypto";
 
 export const authRouter = Router();
 
@@ -126,6 +129,99 @@ authRouter.put("/password", requireAuth, async (req, res) => {
     user.passwordChangedAt = new Date();
     await user.save();
     setAuthCookie(res, signAuthToken(user));
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ---- Forgotten password ---------------------------------------------------
+// forgot-password always answers the same way whether or not the address has an
+// account (so it can't be used to find out who is registered), and does its work
+// after replying so the response time doesn't give it away either. The link holds a
+// random token that is single-use, expires in an hour and is stored only as a hash.
+// It goes in the URL fragment, which browsers never send to a server or in a Referer.
+const RESET_TTL_MS = 60 * 60 * 1000;
+const resetByEmail = createLimiter({ name: "forgot-email", limit: 3, windowMs: 60 * 60 * 1000 });
+const resetByIp = createLimiter({ name: "forgot-ip", limit: 10, windowMs: 60 * 60 * 1000 });
+const resetFails = createLimiter({ name: "reset-fail", limit: 10, windowMs: FIFTEEN_MIN });
+const hashToken = (token) => createHash("sha256").update(token).digest("hex");
+
+const forgotSchema = z.object({ email: z.string().email() });
+const resetSchema = z.object({ token: z.string().min(20).max(200), newPassword: z.string().min(8).max(72) });
+
+async function emailResetLink(email) {
+  const user = await User.findOne({ email: email.toLowerCase() });
+  if (!user) return;
+  await PasswordReset.deleteMany({ user: user._id }); // only the newest link works
+  const token = randomBytes(32).toString("hex");
+  await PasswordReset.create({ user: user._id, tokenHash: hashToken(token), expireAt: new Date(Date.now() + RESET_TTL_MS) });
+  const base = (process.env.CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "");
+  await sendMail({
+    to: user.email,
+    subject: "Reset your CreativesSelect password",
+    text:
+      `Hi ${user.displayName},\n\n` +
+      "Someone asked to reset the password for your CreativesSelect account. " +
+      "To choose a new one, open this link within an hour:\n\n" +
+      `${base}/reset-password#token=${token}\n\n` +
+      "If that wasn't you, ignore this email — your password stays as it is.",
+  });
+}
+
+// Lets the page say so up front when this site can't send email yet, instead of promising a link
+// that will never arrive. (A site-wide fact, so it reveals nothing about any account.)
+authRouter.get("/reset-available", (req, res) => res.json({ available: mailAvailable() }));
+
+authRouter.post("/forgot-password", async (req, res) => {
+  try {
+    if (!mailAvailable()) return res.status(503).json({ error: "Password reset by email isn't set up on this site yet." });
+    const parsed = forgotSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Enter a valid email address" });
+    const emailKey = parsed.data.email.toLowerCase();
+    // Counted for every address, real or not, so the limit itself reveals nothing.
+    if (!(await resetByEmail.allow(emailKey)) || !(await resetByIp.allow(clientIp(req)))) {
+      return tooManyAttempts(res, resetByEmail.windowSeconds);
+    }
+    res.status(200).json({ message: "If that email has an account, a reset link is on its way." });
+    emailResetLink(emailKey).catch((err) => console.error("Password reset email failed:", err.message));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+authRouter.post("/reset-password", async (req, res) => {
+  try {
+    const parsed = resetSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const tokenProblem = parsed.error.issues.some((i) => i.path[0] === "token");
+      return res.status(400).json({ error: tokenProblem ? "This reset link is invalid or has expired" : parsed.error.issues[0].message });
+    }
+    if (await resetFails.isLimited(clientIp(req))) return tooManyAttempts(res, resetFails.windowSeconds);
+
+    const reset = await PasswordReset.findOne({ tokenHash: hashToken(parsed.data.token), expireAt: { $gt: new Date() } });
+    const user = reset ? await User.findById(reset.user) : null;
+    if (!reset || !user) {
+      await resetFails.hit(clientIp(req));
+      return res.status(400).json({ error: "This reset link is invalid or has expired" });
+    }
+
+    user.password = parsed.data.newPassword;
+    // Every existing session stops working, so whoever had access with the old
+    // password (or a stolen session) is signed out. The person resetting signs in afresh.
+    user.passwordChangedAt = new Date();
+    await user.save();
+    await PasswordReset.deleteMany({ user: user._id });
+    sendMail({
+      to: user.email,
+      subject: "Your CreativesSelect password was changed",
+      text:
+        `Hi ${user.displayName},\n\n` +
+        "The password for your CreativesSelect account was just reset. If that was you, there's nothing to do. " +
+        "If it wasn't, reset it again right away.",
+    });
     res.status(204).end();
   } catch (err) {
     console.error(err);
