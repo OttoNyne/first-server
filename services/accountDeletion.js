@@ -18,6 +18,7 @@ import { MediaReaction } from "../models/MediaReaction.js";
 import { Message } from "../models/Message.js";
 import { GroupMessage } from "../models/GroupMessage.js";
 import { PasswordReset } from "../models/PasswordReset.js";
+import { LiveSession, LiveListener, LiveSignal, LiveComment } from "../models/Live.js";
 import { deleteAllStoredAssets } from "./storedAssets.js";
 
 // Groups the user created: an empty group is deleted; otherwise it is handed
@@ -72,6 +73,14 @@ export async function deleteAccount(userId) {
   await Message.deleteMany({ $or: [{ sender: id }, { recipient: id }] });
   await GroupMessage.deleteMany({ sender: id });
   await PasswordReset.deleteMany({ user: id });
+  // Voice lives: ones they hosted (with everything in them), and their part in others.
+  const hosted = (await LiveSession.find({ host: id }).select("_id")).map((s) => s._id);
+  await Promise.all([
+    LiveListener.deleteMany({ $or: [{ session: { $in: hosted } }, { user: id }] }),
+    LiveSignal.deleteMany({ $or: [{ session: { $in: hosted } }, { from: id }, { to: id }] }),
+    LiveComment.deleteMany({ $or: [{ session: { $in: hosted } }, { user: id }] }),
+  ]);
+  await LiveSession.deleteMany({ host: id });
   await UsernameHistory.deleteMany({ user: id });
 
   // Notifications addressed to them, and ones they caused (actorId was stored

@@ -12,6 +12,12 @@ export async function areBlocked(idA, idB) {
   return !!block;
 }
 
+// Ids of everyone the viewer has blocked or been blocked by (either direction hides them).
+export async function blockedUserIds(viewerId) {
+  const blocks = await Block.find({ $or: [{ blocker: viewerId }, { blocked: viewerId }] });
+  return new Set(blocks.map((b) => (String(b.blocker) === String(viewerId) ? String(b.blocked) : String(b.blocker))));
+}
+
 export async function areFriends(idA, idB) {
   const friendship = await Friendship.findOne({
     status: "accepted",

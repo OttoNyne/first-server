@@ -3,9 +3,9 @@ import mongoose from "mongoose";
 import { Group } from "../models/Group.js";
 import { GroupMembership } from "../models/GroupMembership.js";
 import { GroupMessage, MAX_GROUP_MESSAGE_LENGTH } from "../models/GroupMessage.js";
-import { Block } from "../models/Block.js";
 import { User } from "../models/User.js";
 import { createLimiter } from "../utils/rateLimit.js";
+import { blockedUserIds } from "../utils/visibility.js";
 import { requireAuth } from "../middleware/auth.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { escapeRegex } from "../utils/regex.js";
@@ -112,11 +112,6 @@ async function requireMembership(req, res) {
   return membership;
 }
 
-async function blockedWith(viewerId) {
-  const blocks = await Block.find({ $or: [{ blocker: viewerId }, { blocked: viewerId }] });
-  return new Set(blocks.map((b) => String(b.blocker) === String(viewerId) ? String(b.blocked) : String(b.blocker)));
-}
-
 async function toGroupMessages(messages, viewerId) {
   const senders = await User.find({ _id: { $in: [...new Set(messages.map((m) => String(m.sender)))] } });
   const byId = new Map(senders.map((u) => [String(u._id), u]));
@@ -135,7 +130,7 @@ async function toGroupMessages(messages, viewerId) {
 
 groupsRouter.get("/:id/messages", async (req, res) => {
   if (!(await requireMembership(req, res))) return;
-  const blocked = await blockedWith(req.user.id);
+  const blocked = await blockedUserIds(req.user.id);
   const filter = { group: req.params.id, sender: { $nin: [...blocked] } };
   if (typeof req.query.before === "string" && mongoose.isValidObjectId(req.query.before)) {
     filter._id = { $lt: req.query.before };

@@ -30,3 +30,5 @@ services:
         sync: false
       - key: MAIL_FROM
         sync: false
+      - key: LIVE_ICE_SERVERS
+        sync: false

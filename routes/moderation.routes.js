@@ -4,6 +4,7 @@ import { Block } from "../models/Block.js";
 import { Friendship } from "../models/Friendship.js";
 import { Report } from "../models/Report.js";
 import { requireAuth } from "../middleware/auth.js";
+import { removeListenersBetween } from "./live.routes.js";
 
 export const moderationRouter = Router();
 moderationRouter.use(requireAuth);
@@ -27,6 +28,8 @@ moderationRouter.post("/users/:username/block", async (req, res) => {
     { blocker: req.user.id, blocked: target._id },
     { upsert: true }
   );
+  // neither person stays in the other's voice live
+  await removeListenersBetween(req.user.id, target._id);
 
   res.status(204).end();
 });

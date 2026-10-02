@@ -20,6 +20,7 @@ import { aiRouter } from "./routes/ai.routes.js";
 import { tracksRouter } from "./routes/tracks.routes.js";
 import { tasksRouter } from "./routes/tasks.routes.js";
 import { messagesRouter } from "./routes/messages.routes.js";
+import { liveRouter } from "./routes/live.routes.js";
 import { requireTrustedOrigin } from "./middleware/csrf.js";
 
 export const app = express();
@@ -74,5 +75,6 @@ app.use("/api/ai", aiRouter);
 app.use("/api/tracks", tracksRouter);
 app.use("/api/tasks", tasksRouter);
 app.use("/api/messages", messagesRouter);
+app.use("/api/live", liveRouter);
 
 app.use(errorHandler);
