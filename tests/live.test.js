@@ -376,6 +376,112 @@ describe("voice live rooms", () => {
     });
   });
 
+  describe("telling friends", () => {
+    let Notification;
+    beforeAll(async () => {
+      ({ Notification } = await import("../models/Notification.js"));
+    });
+    const notesFor = (u) => Notification.find({ recipient: u.user.id, type: "live_started" });
+
+    it("notifies the host's friends, with who and what, and nobody else", async () => {
+      const alice = await signup(app, "alice");
+      const bob = await signup(app, "bob");
+      const cara = await signup(app, "cara");
+      const stranger = await signup(app, "stranger");
+      await befriend(alice, bob);
+      await befriend(alice, cara);
+      const id = (await goLive(alice, "Mixing a new track")).body.live.id;
+
+      for (const friend of [bob, cara]) {
+        const notes = await notesFor(friend);
+        expect(notes).toHaveLength(1);
+        expect(notes[0].payload).toMatchObject({ actorId: alice.user.id, liveId: id, title: "Mixing a new track" });
+      }
+      expect(await notesFor(stranger)).toHaveLength(0);
+      expect(await notesFor(alice)).toHaveLength(0); // not the host themselves
+    });
+
+    it("shows up in the friend's notifications with the host as the actor", async () => {
+      const alice = await signup(app, "alice");
+      const bob = await signup(app, "bob");
+      await befriend(alice, bob);
+      const id = (await goLive(alice, "Open mic")).body.live.id;
+      const { notifications } = (await bob.agent.get("/api/notifications")).body;
+      expect(notifications[0]).toMatchObject({ type: "live_started", isRead: false, payload: { liveId: id, title: "Open mic" } });
+      expect(notifications[0].actor.username).toBe("alice");
+    });
+
+    it("doesn't notify someone who is no longer a friend or has blocked the host", async () => {
+      const alice = await signup(app, "alice");
+      const bob = await signup(app, "bob");
+      const cara = await signup(app, "cara");
+      await befriend(alice, bob);
+      await befriend(alice, cara);
+      await bob.agent.delete(`/api/friends/${alice.user.id}`);
+      await cara.agent.post("/api/users/alice/block");
+      await goLive(alice);
+      expect(await notesFor(bob)).toHaveLength(0);
+      expect(await notesFor(cara)).toHaveLength(0);
+    });
+
+    it("works for a private-profile host (their friends are the only ones who could see it anyway)", async () => {
+      const alice = await signup(app, "alice", { private: true });
+      const bob = await signup(app, "bob");
+      await befriend(alice, bob);
+      await goLive(alice);
+      expect(await notesFor(bob)).toHaveLength(1);
+    });
+
+    it("removes the notification when the live ends, however it ends", async () => {
+      const alice = await signup(app, "alice");
+      const bob = await signup(app, "bob");
+      await befriend(alice, bob);
+
+      const first = (await goLive(alice, "One")).body.live.id;
+      expect(await notesFor(bob)).toHaveLength(1);
+      expect((await alice.agent.post(`/api/live/${first}/end`)).status).toBe(204);
+      expect(await notesFor(bob)).toHaveLength(0);
+
+      // starting a second live ends the first and replaces its notification
+      await goLive(alice, "Two");
+      await goLive(alice, "Three");
+      const notes = await notesFor(bob);
+      expect(notes).toHaveLength(1);
+      expect(notes[0].payload.title).toBe("Three");
+
+      // and a host who simply vanishes: the server's cleanup removes it too
+      await LiveSession.updateOne({ title: "Three" }, { $set: { lastHeartbeat: new Date(Date.now() - 60_000) } });
+      await bob.agent.get("/api/live");
+      expect(await notesFor(bob)).toHaveLength(0);
+    });
+
+    it("still starts the live if telling friends goes wrong", async () => {
+      const alice = await signup(app, "alice");
+      const bob = await signup(app, "bob");
+      await befriend(alice, bob);
+      const original = Notification.insertMany;
+      Notification.insertMany = async () => {
+        throw new Error("database hiccup");
+      };
+      try {
+        const res = await goLive(alice, "Still on");
+        expect(res.status).toBe(201);
+        expect((await alice.agent.get("/api/live")).body.lives).toHaveLength(1);
+      } finally {
+        Notification.insertMany = original;
+      }
+    });
+
+    it("is removed with the host's account", async () => {
+      const alice = await signup(app, "alice");
+      const bob = await signup(app, "bob");
+      await befriend(alice, bob);
+      await goLive(alice);
+      expect((await alice.agent.delete("/api/profiles/me").send({ password: "password123" })).status).toBe(204);
+      expect(await notesFor(bob)).toHaveLength(0);
+    });
+  });
+
   it("removes a person's lives, listening and comments when their account is deleted", async () => {
     const alice = await signup(app, "alice");
     const bob = await signup(app, "bob");

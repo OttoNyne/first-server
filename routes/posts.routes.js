@@ -46,11 +46,39 @@ postsRouter.get("/user/:username", async (req, res) => {
   }
 });
 
+// How a picture is framed: its shape, how far it is zoomed in (1 to 3 times) and which part
+// of it stays in view ("x% y%", each 0-100). All optional; checked here because the browser
+// controls are only a convenience.
+const ASPECTS = ["original", "1:1", "4:3", "16:9"];
+const POSITION = /^(\d{1,3})% (\d{1,3})%$/;
+function readFraming(body) {
+  const out = {};
+  if (body.imageAspect !== undefined && body.imageAspect !== null) {
+    if (!ASPECTS.includes(body.imageAspect)) return { error: "Picture shape must be original, 1:1, 4:3 or 16:9" };
+    out.imageAspect = body.imageAspect;
+  }
+  if (body.imageZoom !== undefined && body.imageZoom !== null) {
+    if (typeof body.imageZoom !== "number" || !Number.isFinite(body.imageZoom) || body.imageZoom < 1 || body.imageZoom > 3) {
+      return { error: "Picture zoom must be a number from 1 to 3" };
+    }
+    out.imageZoom = Math.round(body.imageZoom * 100) / 100;
+  }
+  if (body.imagePosition !== undefined && body.imagePosition !== null) {
+    const m = typeof body.imagePosition === "string" ? POSITION.exec(body.imagePosition) : null;
+    if (!m || Number(m[1]) > 100 || Number(m[2]) > 100) return { error: "Picture position must look like \"50% 50%\" (0-100 each)" };
+    out.imagePosition = body.imagePosition;
+  }
+  return { framing: out };
+}
+
 postsRouter.post("/", async (req, res) => {
+  const { framing, error } = readFraming(req.body);
+  if (error) return res.status(400).json({ error });
   const post = await Post.create({
     author: req.user.id,
     content: req.body.content,
     imageUrl: req.body.imageUrl,
+    ...(req.body.imageUrl ? framing : {}),
     isAiText: req.body.isAiText || false,
     isAiImage: req.body.isAiImage || false,
   });

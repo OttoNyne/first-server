@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { LiveSession, LiveListener, LiveSignal, LiveComment } from "../models/Live.js";
 import { User } from "../models/User.js";
 import { Friendship } from "../models/Friendship.js";
+import { Notification } from "../models/Notification.js";
 import { requireAuth } from "../middleware/auth.js";
 import { assertVisible, blockedUserIds } from "../utils/visibility.js";
 import { toPublicUser } from "../utils/serialize.js";
@@ -43,7 +44,33 @@ async function endStaleSessions() {
   if (!stale.length) return;
   const ids = stale.map((s) => s._id);
   await LiveSession.updateMany({ _id: { $in: ids } }, { $set: { status: "ended", endedAt: new Date(), expireAt: new Date(Date.now() + ENDED_KEEP_MS) } });
-  await Promise.all([LiveListener.deleteMany({ session: { $in: ids } }), LiveSignal.deleteMany({ session: { $in: ids } })]);
+  await Promise.all([
+    LiveListener.deleteMany({ session: { $in: ids } }),
+    LiveSignal.deleteMany({ session: { $in: ids } }),
+    removeLiveNotifications(ids),
+  ]);
+}
+
+// "X is live" notifications are only useful while the live is on, so they go when it ends.
+const removeLiveNotifications = (sessionIds) =>
+  Notification.deleteMany({ type: "live_started", "payload.liveId": { $in: sessionIds.map(String) } });
+
+// Tells the host's friends they've gone live. A failure here must never stop the live from starting.
+async function notifyFriendsOfLive(session, hostId) {
+  try {
+    const friendships = await Friendship.find({ status: "accepted", $or: [{ requester: hostId }, { addressee: hostId }] });
+    const friendIds = friendships.map((f) => (String(f.requester) === String(hostId) ? f.addressee : f.requester));
+    if (!friendIds.length) return;
+    await Notification.insertMany(
+      friendIds.map((recipient) => ({
+        recipient,
+        type: "live_started",
+        payload: { actorId: String(hostId), liveId: String(session._id), title: session.title },
+      }))
+    );
+  } catch (err) {
+    console.error("Couldn't notify friends of a live:", err.message);
+  }
 }
 
 export async function endSession(session) {
@@ -51,7 +78,11 @@ export async function endSession(session) {
     { _id: session._id },
     { $set: { status: "ended", endedAt: new Date(), expireAt: new Date(Date.now() + ENDED_KEEP_MS) } }
   );
-  await Promise.all([LiveListener.deleteMany({ session: session._id }), LiveSignal.deleteMany({ session: session._id })]);
+  await Promise.all([
+    LiveListener.deleteMany({ session: session._id }),
+    LiveSignal.deleteMany({ session: session._id }),
+    removeLiveNotifications([session._id]),
+  ]);
 }
 
 async function listenerCount(sessionId) {
@@ -183,6 +214,7 @@ liveRouter.post("/", async (req, res) => {
 
   const session = await LiveSession.create({ host: req.user.id, title, lastHeartbeat: new Date() });
   const host = await User.findById(req.user.id);
+  await notifyFriendsOfLive(session, req.user.id);
   res.status(201).json({ live: await serializeSession(session, host, req.user.id) });
 });
 
