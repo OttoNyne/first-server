@@ -9,6 +9,7 @@ import { usernameSchema } from "../utils/username.js";
 import { UsernameHistory } from "../models/UsernameHistory.js";
 import { PasswordReset } from "../models/PasswordReset.js";
 import { sendMail, mailAvailable } from "../utils/mailer.js";
+import { primaryClientUrl } from "../utils/origins.js";
 import { createHash, randomBytes } from "node:crypto";
 
 export const authRouter = Router();
@@ -157,7 +158,7 @@ async function emailResetLink(email) {
   await PasswordReset.deleteMany({ user: user._id }); // only the newest link works
   const token = randomBytes(32).toString("hex");
   await PasswordReset.create({ user: user._id, tokenHash: hashToken(token), expireAt: new Date(Date.now() + RESET_TTL_MS) });
-  const base = (process.env.CLIENT_URL || "http://localhost:5173").replace(/\/+$/, "");
+  const base = process.env.CLIENT_URL ? primaryClientUrl() : "http://localhost:5173";
   await sendMail({
     to: user.email,
     subject: "Reset your CreativesSelect password",

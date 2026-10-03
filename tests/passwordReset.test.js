@@ -67,6 +67,20 @@ describe("forgotten password", () => {
     expect(outbox[0].text).not.toMatch(/\?token=/); // never in the query string
   });
 
+  it("builds the link from the first address when CLIENT_URL lists several", async () => {
+    const before = process.env.CLIENT_URL;
+    process.env.CLIENT_URL = "https://www.mysite.org/,https://my-app.vercel.app";
+    try {
+      await signup(app, "alice");
+      await forgot("alice@example.com");
+      await mailArrives();
+      expect(outbox[0].text).toContain("https://www.mysite.org/reset-password#token=");
+      expect(outbox[0].text).not.toContain("vercel.app");
+    } finally {
+      process.env.CLIENT_URL = before;
+    }
+  });
+
   it("answers identically for an address with no account, and sends nothing", async () => {
     await signup(app, "alice");
     const known = await forgot("alice@example.com");

@@ -134,6 +134,37 @@ describe("abuse protection", () => {
       expect(res.status).toBe(204);
     });
 
+    it("accepts every address listed in CLIENT_URL (comma-separated), and nothing similar-looking", async () => {
+      const before = process.env.CLIENT_URL;
+      process.env.CLIENT_URL = "https://app.example.com, https://www.mysite.org/";
+      try {
+        for (const ok of ["https://app.example.com", "https://www.mysite.org"]) {
+          expect((await request(app).post("/api/auth/logout").set("Origin", ok)).status).toBe(204);
+        }
+        for (const bad of ["https://mysite.org", "http://www.mysite.org", "https://www.mysite.org.evil.net", "https://app.example.com:8443", "https://evil.example.net"]) {
+          expect((await request(app).post("/api/auth/logout").set("Origin", bad)).status).toBe(403);
+        }
+      } finally {
+        process.env.CLIENT_URL = before;
+      }
+    });
+
+    it("answers CORS preflight only for listed addresses, and lets cookies through for them", async () => {
+      const before = process.env.CLIENT_URL;
+      process.env.CLIENT_URL = "https://app.example.com,https://www.mysite.org";
+      try {
+        for (const ok of ["https://app.example.com", "https://www.mysite.org"]) {
+          const res = await request(app).get("/api/health").set("Origin", ok);
+          expect(res.headers["access-control-allow-origin"]).toBe(ok);
+          expect(res.headers["access-control-allow-credentials"]).toBe("true");
+        }
+        const bad = await request(app).get("/api/health").set("Origin", "https://evil.example.net");
+        expect(bad.headers["access-control-allow-origin"]).toBeUndefined();
+      } finally {
+        process.env.CLIENT_URL = before;
+      }
+    });
+
     it("allows requests with no Origin (curl, server-to-server) and never blocks reads", async () => {
       expect((await request(app).post("/api/auth/logout")).status).toBe(204);
       const read = await request(app).get("/api/health").set("Origin", "https://evil.example.net");

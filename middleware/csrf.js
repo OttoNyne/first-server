@@ -1,8 +1,6 @@
-const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+import { isAllowedOrigin } from "../utils/origins.js";
 
-function allowedOrigin() {
-  return (process.env.CLIENT_URL || "http://localhost:3000").replace(/\/+$/, "");
-}
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 // The auth cookie is SameSite=None in production (frontend and API are on
 // different domains), so the browser attaches it to requests made by ANY
@@ -14,6 +12,6 @@ function allowedOrigin() {
 export function requireTrustedOrigin(req, res, next) {
   if (SAFE_METHODS.has(req.method)) return next();
   const origin = req.get("origin");
-  if (!origin || origin === allowedOrigin()) return next();
+  if (!origin || isAllowedOrigin(origin)) return next();
   res.status(403).json({ error: "Untrusted origin" });
 }

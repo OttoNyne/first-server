@@ -29,7 +29,7 @@ The server listens on port 5000 (override with `PORT`) and logs
 | `MONGODB_URI` | yes | MongoDB Atlas (or local) connection string |
 | `JWT_SECRET` | yes | Signs/verifies the auth cookie |
 | `PORT` | no (default 5000) | HTTP port |
-| `CLIENT_URL` | no (default `http://localhost:3000`) | Allowed CORS origin — set this to your actual frontend origin (e.g. `http://localhost:5173` in dev) |
+| `CLIENT_URL` | no (default `http://localhost:3000`) | Allowed frontend origin(s) — set this to your actual frontend address (e.g. `http://localhost:5173` in dev). To allow several addresses, separate them with commas (e.g. `https://www.example.com,https://my-app.vercel.app`); the first is used for links in emails |
 | `CLOUDINARY_CLOUD_NAME` | yes (for uploads) | Cloudinary account cloud name |
 | `CLOUDINARY_API_KEY` | yes (for uploads) | Cloudinary API key |
 | `CLOUDINARY_API_SECRET` | yes (for uploads) | Cloudinary API secret |
@@ -43,7 +43,7 @@ The server listens on port 5000 (override with `PORT`) and logs
 npm test
 ```
 
-Runs the Vitest + Supertest suite (188 tests: auth incl. throttling/CSRF/session
+Runs the Vitest + Supertest suite (198 tests: auth incl. throttling/CSRF/session
 revocation, Tasks CRUD and the Help wanted board, friends, blocking, groups, media,
 profile editing, portfolio reactions and videos, account deletion, password change, uploads,
 stored-asset cleanup)
@@ -92,7 +92,7 @@ them, `POST /api/media/upload` will fail.
   first-party — iOS/Safari blocks cross-site cookies. Per-IP limits read Vercel's
   `x-vercel-forwarded-for` (`utils/clientIp.js`).
 - State-changing requests from an `Origin` other than `CLIENT_URL` get `403` (defense in depth on
-  top of `SameSite=Lax`). Set `CLIENT_URL` to the exact frontend origin (the Vercel site).
+  top of `SameSite=Lax`). Set `CLIENT_URL` to the exact frontend origin(s) (the Vercel site and/or your own domain).
 - `requireAuth` re-checks the user on every request, so deleting an account or
   changing a password immediately invalidates old tokens.
 - `PUT /api/auth/password` and `DELETE /api/profiles/me` both require the current password.

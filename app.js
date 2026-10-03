@@ -22,6 +22,7 @@ import { tasksRouter } from "./routes/tasks.routes.js";
 import { messagesRouter } from "./routes/messages.routes.js";
 import { liveRouter } from "./routes/live.routes.js";
 import { requireTrustedOrigin } from "./middleware/csrf.js";
+import { isAllowedOrigin } from "./utils/origins.js";
 
 export const app = express();
 
@@ -32,7 +33,8 @@ app.set("trust proxy", 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    // checked on every request, against every address listed in CLIENT_URL
+    origin: (origin, callback) => callback(null, !origin || isAllowedOrigin(origin)),
     credentials: true,
   })
 );
