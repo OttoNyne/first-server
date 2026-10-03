@@ -3,6 +3,17 @@ import { MockAIProvider } from "./MockAIProvider.js";
 import { isStorageUnavailable, logStorageProblem, STORAGE_UNAVAILABLE_MESSAGE } from "../../utils/storageErrors.js";
 
 const MAX_PROMPT_CHARS = 500;
+// A wallpaper made from a reference photo uses a model that takes pictures as input (FLUX.2 klein); one made from words
+// alone uses the ordinary image model. Both are 16:9, which is what a wallpaper wants.
+const REFERENCE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
+const WALLPAPER_STYLE = ", wide cinematic wallpaper, rich detail, no text, no watermark";
+const WALLPAPER_SIZE = { width: "1024", height: "576" };
+// How closely to follow the reference photo, said to the model in words (it has no strength dial).
+const CLOSENESS_INSTRUCTION = {
+  close: "Keep the composition, shapes and colours of the reference image closely, and apply this to it: ",
+  balanced: "Use the reference image as the starting point, keeping its main subject, and make this: ",
+  loose: "Take loose inspiration from the reference image (its mood and palette) to create this new scene: ",
+};
 
 function aiError(message, status = 502) {
   const err = new Error(message);
@@ -73,15 +84,34 @@ export class CloudflareAIProvider extends MockAIProvider {
   }
 
   async generateImage({ prompt }) {
-    const url = `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/ai/run/${this.model}`;
+    return this.runImageModel(this.model, { prompt: prompt.slice(0, MAX_PROMPT_CHARS), steps: 4 });
+  }
+
+  // A picture for a profile wallpaper: from the description alone, or — with a reference photo — the photo reshaped to
+  // match the description, as closely as `closeness` ("close", "balanced" or "loose") asks.
+  async generateWallpaper({ prompt, reference, closeness = "balanced" }) {
+    const text = (prompt.slice(0, MAX_PROMPT_CHARS - WALLPAPER_STYLE.length) + WALLPAPER_STYLE).slice(0, MAX_PROMPT_CHARS);
+    if (!reference) return this.runImageModel(this.model, { prompt: text, steps: 4 });
+    const form = new FormData();
+    form.append("prompt", ((CLOSENESS_INSTRUCTION[closeness] ?? CLOSENESS_INSTRUCTION.balanced) + text).slice(0, MAX_PROMPT_CHARS + 120));
+    form.append("input_image_0", new Blob([reference.buffer], { type: reference.mimetype }), "reference");
+    form.append("width", WALLPAPER_SIZE.width);
+    form.append("height", WALLPAPER_SIZE.height);
+    return this.runImageModel(process.env.CLOUDFLARE_REFERENCE_MODEL || REFERENCE_MODEL, form);
+  }
+
+  async runImageModel(model, input) {
+    const url = `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/ai/run/${model}`;
 
     let res;
     try {
+      // a form (a reference photo travels with it) sets its own content type; anything else is sent as JSON
+      const isForm = input instanceof FormData;
       res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiToken}` },
-        body: JSON.stringify({ prompt: prompt.slice(0, MAX_PROMPT_CHARS), steps: 4 }),
-        signal: AbortSignal.timeout(60_000),
+        headers: { ...(isForm ? {} : { "Content-Type": "application/json" }), Authorization: `Bearer ${this.apiToken}` },
+        body: isForm ? input : JSON.stringify(input),
+        signal: AbortSignal.timeout(90_000),
       });
     } catch {
       throw aiError("Image generation timed out or is unavailable right now");

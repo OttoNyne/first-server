@@ -10,6 +10,7 @@ import { UsernameHistory } from "../models/UsernameHistory.js";
 import { usernameSchema, displayNameSchema } from "../utils/username.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { deleteAccount } from "../services/accountDeletion.js";
+import { WALLPAPER_MOTIONS, isWallpaperMotion } from "../utils/wallpaperMotion.js";
 import { deleteStoredAssetIfUnused } from "../services/storedAssets.js";
 import { toPublicUser, toPublicTrack, toPublicComment } from "../utils/serialize.js";
 import { getProfileForViewer } from "../utils/visibility.js";
@@ -29,7 +30,7 @@ profilesRouter.get("/", requireAuth, async (req, res) => {
 
 profilesRouter.patch("/me", requireAuth, async (req, res) => {
   const user = await User.findById(req.user.id);
-  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, isPrivate, theme } = req.body;
+  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme } = req.body;
   if (displayName !== undefined) {
     const parsedName = displayNameSchema.safeParse(displayName);
     if (!parsedName.success) return res.status(400).json({ error: parsedName.error.issues[0].message });
@@ -37,6 +38,9 @@ profilesRouter.patch("/me", requireAuth, async (req, res) => {
   }
   if (bio !== undefined && bio !== null && (typeof bio !== "string" || bio.length > 1000)) {
     return res.status(400).json({ error: "Bio must be text of 1000 characters or fewer" });
+  }
+  if (wallpaperMotion !== undefined && !isWallpaperMotion(wallpaperMotion)) {
+    return res.status(400).json({ error: `wallpaperMotion must be one of: ${WALLPAPER_MOTIONS.join(", ")}` });
   }
   const replaced = [];
 
@@ -52,6 +56,7 @@ profilesRouter.patch("/me", requireAuth, async (req, res) => {
   }
   if (wallpaperType !== undefined) user.wallpaperType = wallpaperType;
   if (wallpaperPosition !== undefined) user.wallpaperPosition = wallpaperPosition;
+  if (wallpaperMotion !== undefined) user.wallpaperMotion = wallpaperMotion;
   if (isPrivate !== undefined) user.isPrivate = isPrivate;
   if (theme !== undefined) user.theme = { ...(user.theme?.toObject?.() ?? user.theme ?? {}), ...theme };
 

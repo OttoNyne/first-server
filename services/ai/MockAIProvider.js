@@ -54,6 +54,16 @@ export class MockAIProvider {
     return { url };
   }
 
+  // A picture to use as a wallpaper. With a reference photo it also takes its colours from that photo, so the result visibly
+  // differs from the same description without one. (The real provider reshapes the photo itself.)
+  async generateWallpaper({ prompt, reference }) {
+    await delay(300 + Math.random() * 300);
+    const seed = reference ? prompt + crypto.createHash("md5").update(reference.buffer).digest("hex") : prompt;
+    const [c1, c2] = hashToColors(seed);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"${reference ? ' data-reference="true"' : ""}><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${c1}"/><stop offset="100%" stop-color="${c2}"/></linearGradient></defs><rect width="640" height="360" fill="url(#g)"/><circle cx="470" cy="110" r="70" fill="#ffffff" fill-opacity="0.18"/>${reference ? '<rect x="40" y="220" width="200" height="90" rx="12" fill="#000000" fill-opacity="0.15"/>' : ""}</svg>`;
+    return { url: `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}` };
+  }
+
   async searchImages(query) {
     return searchOpenverseImages(query);
   }

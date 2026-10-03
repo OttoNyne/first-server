@@ -1,7 +1,9 @@
 import { Router } from "express";
+import multer from "multer";
+import { sniffImageType } from "../utils/imageSniff.js";
 import { requireAuth } from "../middleware/auth.js";
 import { createLimiter } from "../utils/rateLimit.js";
-import { recordStoredAsset } from "../services/storedAssets.js";
+import { recordStoredAsset, deleteStoredAssetIfUnused } from "../services/storedAssets.js";
 import { getAIProvider, isRealImageProviderConfigured } from "../services/ai/index.js";
 
 export const aiRouter = Router();
@@ -24,6 +26,8 @@ const IMAGE_LIMIT = 10;
 const TEXT_LIMIT = 30;
 const WINDOW_MS = 60 * 60 * 1000;
 const imageLimit = createLimiter({ name: "ai-image", limit: IMAGE_LIMIT, windowMs: WINDOW_MS });
+const WALLPAPER_LIMIT = 6; // each one can be several times the work of a plain picture
+const wallpaperLimit = createLimiter({ name: "ai-wallpaper", limit: WALLPAPER_LIMIT, windowMs: WINDOW_MS });
 const textLimit = createLimiter({ name: "ai-text", limit: TEXT_LIMIT, windowMs: WINDOW_MS });
 
 aiRouter.post("/text", async (req, res) => {
@@ -65,6 +69,58 @@ aiRouter.post("/image", async (req, res) => {
   } catch (err) {
     handleAIError(err, res);
   }
+});
+
+// A wallpaper from a description, optionally reshaping a reference photo. The photo arrives with the request (never as a
+// link for this server to fetch), is kept in memory only, and is checked by its own bytes.
+const MAX_REFERENCE_BYTES = 4 * 1024 * 1024;
+const MAX_WALLPAPER_PROMPT = 500;
+const referenceUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_REFERENCE_BYTES, files: 1, fields: 4 } }).single("reference");
+
+function readReference(req, res, next) {
+  referenceUpload(req, res, (err) => {
+    if (!err) return next();
+    if (err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "That photo is too large — use one under 4 MB." });
+    return res.status(400).json({ error: "Couldn't read that upload." });
+  });
+}
+
+aiRouter.post("/wallpaper", readReference, async (req, res) => {
+  const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim() : "";
+  if (!prompt) return res.status(400).json({ error: "prompt is required" });
+  if (prompt.length > MAX_WALLPAPER_PROMPT) return res.status(400).json({ error: `Describe it in ${MAX_WALLPAPER_PROMPT} characters or fewer` });
+
+  let reference = null;
+  if (req.file) {
+    const type = sniffImageType(req.file.buffer);
+    if (!type) return res.status(400).json({ error: "The reference photo must be a JPEG, PNG or WebP picture." });
+    reference = { buffer: req.file.buffer, mimetype: type };
+  }
+  const closeness = req.body?.closeness === undefined || req.body.closeness === "" ? "balanced" : req.body.closeness;
+  if (!["close", "balanced", "loose"].includes(closeness)) return res.status(400).json({ error: "closeness must be close, balanced or loose" });
+
+  if (isRealImageProviderConfigured() && !(await wallpaperLimit.allow(req.user.id))) {
+    return res.status(429).json({ error: `Wallpaper limit reached (${WALLPAPER_LIMIT} per hour) — try again later` });
+  }
+  try {
+    const result = await getAIProvider().generateWallpaper({ prompt, reference, closeness });
+    if (result.publicId) {
+      await recordStoredAsset({ ownerId: req.user.id, url: result.url, publicId: result.publicId, kind: "ai" }).catch((err) =>
+        console.error("Couldn't record generated wallpaper:", err)
+      );
+    }
+    res.json({ url: result.url, usedReference: Boolean(reference) });
+  } catch (err) {
+    handleAIError(err, res);
+  }
+});
+
+// A generated picture the person decided not to use: remove it from storage. Only what this person generated, and only if
+// nothing (a wallpaper, a post, ...) uses it, is ever deleted, so this can't be used to remove anything else.
+aiRouter.post("/discard", async (req, res) => {
+  if (typeof req.body?.url !== "string" || !req.body.url) return res.status(400).json({ error: "url is required" });
+  await deleteStoredAssetIfUnused({ ownerId: req.user.id, url: req.body.url });
+  res.status(204).end();
 });
 
 aiRouter.get("/images/search", async (req, res) => {

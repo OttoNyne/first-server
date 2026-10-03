@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
+import { WALLPAPER_MOTIONS } from "../utils/wallpaperMotion.js";
 
 const userSchema = new mongoose.Schema(
   {
@@ -12,6 +13,8 @@ const userSchema = new mongoose.Schema(
     wallpaperUrl: { type: String, default: null },
     wallpaperType: { type: String, enum: ["image", "video"], default: "image" },
     wallpaperPosition: { type: String, default: "50% 50%" },
+    // How a picture wallpaper moves (see utils/wallpaperMotion.js).
+    wallpaperMotion: { type: String, enum: WALLPAPER_MOTIONS, default: "none" },
     isPrivate: { type: Boolean, default: false },
     // Sessions (JWTs) issued before this moment are rejected — set when the
     // password changes so old/stolen sessions stop working.
@@ -57,6 +60,7 @@ userSchema.methods.toPublic = function ({ includeEmail = false } = {}) {
     wallpaperUrl: this.wallpaperUrl,
     wallpaperType: this.wallpaperType,
     wallpaperPosition: this.wallpaperPosition,
+    wallpaperMotion: this.wallpaperMotion ?? "none",
     isPrivate: this.isPrivate,
     createdAt: this.createdAt,
     theme: this.theme || {},
