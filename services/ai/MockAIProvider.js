@@ -43,10 +43,13 @@ export class MockAIProvider {
     return { text: `${template.replace("{topic}", prompt.trim())} ${emoji}` };
   }
 
-  async generateImage({ prompt, kind, live }) {
-    const [c1, c2] = hashToColors(prompt);
+  async generateImage({ prompt, kind, live, reference }) {
+    // with a reference photo the colours also come from the photo, so the result visibly differs (the real provider reshapes it)
+    const [c1, c2] = hashToColors(reference ? prompt + crypto.createHash("md5").update(reference.buffer).digest("hex") : prompt);
     const animate = kind === "wallpaper" && live;
-    const svg = animate
+    const svg = reference
+      ? `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" data-reference="true"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${c1}"/><stop offset="100%" stop-color="${c2}"/></linearGradient></defs><rect width="400" height="400" fill="url(#g)"/><rect x="40" y="260" width="200" height="90" rx="12" fill="#000000" fill-opacity="0.15"/></svg>`
+      : animate
       ? `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${c1}"><animate attributeName="stop-color" values="${c1};${c2};${c1}" dur="6s" repeatCount="indefinite"/></stop><stop offset="100%" stop-color="${c2}"><animate attributeName="stop-color" values="${c2};${c1};${c2}" dur="6s" repeatCount="indefinite"/></stop></linearGradient></defs><rect width="400" height="400" fill="url(#g)"/></svg>`
       : `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${c1}"/><stop offset="100%" stop-color="${c2}"/></linearGradient></defs><rect width="400" height="400" fill="url(#g)"/></svg>`;
 

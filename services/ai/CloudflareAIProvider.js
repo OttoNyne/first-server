@@ -8,6 +8,7 @@ const MAX_PROMPT_CHARS = 500;
 const REFERENCE_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
 const WALLPAPER_STYLE = ", wide cinematic wallpaper, rich detail, no text, no watermark";
 const WALLPAPER_SIZE = { width: "1024", height: "576" };
+const SQUARE_SIZE = { width: "1024", height: "1024" };
 // How closely to follow the reference photo, said to the model in words (it has no strength dial).
 const CLOSENESS_INSTRUCTION = {
   close: "Keep the composition, shapes and colours of the reference image closely, and apply this to it: ",
@@ -83,20 +84,27 @@ export class CloudflareAIProvider extends MockAIProvider {
     return { text: text.trim().replace(/^["“]|["”]$/g, "") };
   }
 
-  async generateImage({ prompt }) {
-    return this.runImageModel(this.model, { prompt: prompt.slice(0, MAX_PROMPT_CHARS), steps: 4 });
+  // A picture for a post, avatar or portfolio: from the description alone, or — with a reference photo — the photo reshaped
+  // to match the description, as closely as `closeness` ("close", "balanced" or "loose") asks.
+  async generateImage({ prompt, reference, closeness = "balanced" }) {
+    const text = prompt.slice(0, MAX_PROMPT_CHARS);
+    if (!reference) return this.runImageModel(this.model, { prompt: text, steps: 4 });
+    return this.generateFromReference({ text, reference, closeness, size: SQUARE_SIZE });
   }
 
-  // A picture for a profile wallpaper: from the description alone, or — with a reference photo — the photo reshaped to
-  // match the description, as closely as `closeness` ("close", "balanced" or "loose") asks.
+  // A picture for a profile wallpaper (wide, with wallpaper wording), optionally from a reference photo.
   async generateWallpaper({ prompt, reference, closeness = "balanced" }) {
     const text = (prompt.slice(0, MAX_PROMPT_CHARS - WALLPAPER_STYLE.length) + WALLPAPER_STYLE).slice(0, MAX_PROMPT_CHARS);
     if (!reference) return this.runImageModel(this.model, { prompt: text, steps: 4 });
+    return this.generateFromReference({ text, reference, closeness, size: WALLPAPER_SIZE });
+  }
+
+  generateFromReference({ text, reference, closeness, size }) {
     const form = new FormData();
     form.append("prompt", ((CLOSENESS_INSTRUCTION[closeness] ?? CLOSENESS_INSTRUCTION.balanced) + text).slice(0, MAX_PROMPT_CHARS + 120));
     form.append("input_image_0", new Blob([reference.buffer], { type: reference.mimetype }), "reference");
-    form.append("width", WALLPAPER_SIZE.width);
-    form.append("height", WALLPAPER_SIZE.height);
+    form.append("width", size.width);
+    form.append("height", size.height);
     return this.runImageModel(process.env.CLOUDFLARE_REFERENCE_MODEL || REFERENCE_MODEL, form);
   }
 

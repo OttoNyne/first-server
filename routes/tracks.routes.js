@@ -32,6 +32,22 @@ tracksRouter.post("/", async (req, res) => {
   res.status(201).json({ track: toPublicTrack(track) });
 });
 
+// Put the owner's tracks in a new order. The list must be exactly their tracks, each once — nothing added, dropped or repeated.
+tracksRouter.put("/order", async (req, res) => {
+  const ids = req.body?.ids;
+  if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) {
+    return res.status(400).json({ error: "ids must be a list of track ids" });
+  }
+  const mine = await Track.find({ owner: req.user.id }).sort("position");
+  const mineIds = new Set(mine.map((t) => String(t._id)));
+  if (ids.length !== mine.length || new Set(ids).size !== ids.length || !ids.every((id) => mineIds.has(id))) {
+    return res.status(400).json({ error: "Send every one of your tracks exactly once" });
+  }
+  await Track.bulkWrite(ids.map((id, position) => ({ updateOne: { filter: { _id: id, owner: req.user.id }, update: { $set: { position } } } })));
+  const tracks = await Track.find({ owner: req.user.id }).sort("position");
+  res.json({ tracks: tracks.map(toPublicTrack) });
+});
+
 tracksRouter.delete("/:id", async (req, res) => {
   const track = await Track.findById(req.params.id);
   if (!track) return res.status(404).json({ error: "Track not found" });

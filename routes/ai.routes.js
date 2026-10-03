@@ -45,10 +45,13 @@ aiRouter.post("/text", async (req, res) => {
   }
 });
 
-aiRouter.post("/image", async (req, res) => {
-  if (!req.body.prompt || typeof req.body.prompt !== "string") {
+// Sent as JSON (a description), or as a form when a reference photo goes with it (see takeReference).
+aiRouter.post("/image", readReference, async (req, res) => {
+  if (!req.body?.prompt || typeof req.body.prompt !== "string") {
     return res.status(400).json({ error: "prompt is required" });
   }
+  const taken = takeReference(req, res);
+  if (!taken) return;
   if (isRealImageProviderConfigured() && !(await imageLimit.allow(req.user.id))) {
     return res.status(429).json({ error: `Image limit reached (${IMAGE_LIMIT} per hour) — try again later` });
   }
@@ -56,7 +59,9 @@ aiRouter.post("/image", async (req, res) => {
     const result = await getAIProvider().generateImage({
       prompt: req.body.prompt,
       kind: req.body.kind,
-      live: req.body.live,
+      live: req.body.live === true || req.body.live === "true",
+      reference: taken.reference,
+      closeness: taken.closeness,
     });
     // Remember who generated a stored image so it can be deleted with its post.
     // (The mock provider returns inline data: URIs, which have nothing to clean up.)
@@ -65,7 +70,7 @@ aiRouter.post("/image", async (req, res) => {
         console.error("Couldn't record generated image:", err)
       );
     }
-    res.json({ url: result.url });
+    res.json({ url: result.url, usedReference: Boolean(taken.reference) });
   } catch (err) {
     handleAIError(err, res);
   }
@@ -75,7 +80,7 @@ aiRouter.post("/image", async (req, res) => {
 // link for this server to fetch), is kept in memory only, and is checked by its own bytes.
 const MAX_REFERENCE_BYTES = 4 * 1024 * 1024;
 const MAX_WALLPAPER_PROMPT = 500;
-const referenceUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_REFERENCE_BYTES, files: 1, fields: 4 } }).single("reference");
+const referenceUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_REFERENCE_BYTES, files: 1, fields: 5 } }).single("reference");
 
 function readReference(req, res, next) {
   referenceUpload(req, res, (err) => {
@@ -85,19 +90,32 @@ function readReference(req, res, next) {
   });
 }
 
+// The reference photo (if any) and how closely to follow it, checked; answers the error and returns null if they are wrong.
+function takeReference(req, res) {
+  let reference = null;
+  if (req.file) {
+    const type = sniffImageType(req.file.buffer);
+    if (!type) {
+      res.status(400).json({ error: "The reference photo must be a JPEG, PNG or WebP picture." });
+      return null;
+    }
+    reference = { buffer: req.file.buffer, mimetype: type };
+  }
+  const closeness = req.body?.closeness === undefined || req.body.closeness === "" ? "balanced" : req.body.closeness;
+  if (!["close", "balanced", "loose"].includes(closeness)) {
+    res.status(400).json({ error: "closeness must be close, balanced or loose" });
+    return null;
+  }
+  return { reference, closeness };
+}
+
 aiRouter.post("/wallpaper", readReference, async (req, res) => {
   const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim() : "";
   if (!prompt) return res.status(400).json({ error: "prompt is required" });
   if (prompt.length > MAX_WALLPAPER_PROMPT) return res.status(400).json({ error: `Describe it in ${MAX_WALLPAPER_PROMPT} characters or fewer` });
-
-  let reference = null;
-  if (req.file) {
-    const type = sniffImageType(req.file.buffer);
-    if (!type) return res.status(400).json({ error: "The reference photo must be a JPEG, PNG or WebP picture." });
-    reference = { buffer: req.file.buffer, mimetype: type };
-  }
-  const closeness = req.body?.closeness === undefined || req.body.closeness === "" ? "balanced" : req.body.closeness;
-  if (!["close", "balanced", "loose"].includes(closeness)) return res.status(400).json({ error: "closeness must be close, balanced or loose" });
+  const taken = takeReference(req, res);
+  if (!taken) return;
+  const { reference, closeness } = taken;
 
   if (isRealImageProviderConfigured() && !(await wallpaperLimit.allow(req.user.id))) {
     return res.status(429).json({ error: `Wallpaper limit reached (${WALLPAPER_LIMIT} per hour) — try again later` });
