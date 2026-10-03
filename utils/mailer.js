@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 
@@ -51,7 +51,9 @@ export async function sendMail({ to, subject, text }) {
     if (process.env.MAIL_OUTBOX_DIR && !isProduction) {
       await mkdir(process.env.MAIL_OUTBOX_DIR, { recursive: true });
       const file = path.join(process.env.MAIL_OUTBOX_DIR, `${Date.now()}-${randomBytes(4).toString("hex")}.json`);
-      await writeFile(file, JSON.stringify({ to, subject, text }, null, 2));
+      // written under another name and then renamed, so a reader never sees a half-written message
+      await writeFile(`${file}.tmp`, JSON.stringify({ to, subject, text }, null, 2));
+      await rename(`${file}.tmp`, file);
       return { sent: true };
     }
 
