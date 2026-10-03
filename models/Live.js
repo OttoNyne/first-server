@@ -28,6 +28,8 @@ const liveListenerSchema = new mongoose.Schema({
   session: { type: ObjectId, ref: "LiveSession", required: true },
   user: { type: ObjectId, ref: "User", required: true },
   lastSeen: { type: Date, required: true },
+  // Where they are on the stage (big lives only): listening, asking to speak, invited by the host, or speaking.
+  stage: { type: String, enum: ["listener", "requested", "invited", "speaking"], default: "listener" },
   expireAt: { type: Date, required: true, expires: 0 },
 });
 liveListenerSchema.index({ session: 1, user: 1 }, { unique: true });

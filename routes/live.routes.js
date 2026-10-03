@@ -10,7 +10,17 @@ import { toPublicUser } from "../utils/serialize.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { createTtlCache } from "../utils/ttlCache.js";
 import { requireVerifiedEmail } from "../middleware/requireVerifiedEmail.js";
-import { MESH_MAX_LISTENERS, createSfuRoom, deleteSfuRoom, removeSfuParticipant, sfuConfigured, sfuMaxListeners, sfuToken } from "../services/livekit.js";
+import {
+  MAX_STAGE_GUESTS,
+  MESH_MAX_LISTENERS,
+  createSfuRoom,
+  deleteSfuRoom,
+  removeSfuParticipant,
+  setSfuPublishing,
+  sfuConfigured,
+  sfuMaxListeners,
+  sfuToken,
+} from "../services/livekit.js";
 
 // Voice-only live rooms. The audio itself never touches this server. Two ways it can travel:
 //   sfu  (when LiveKit is configured) the host sends it once to a media server, which fans it out to
@@ -29,6 +39,9 @@ const MAX_SIGNAL_BYTES = 20_000;
 const MAX_COMMENT_LENGTH = 200;
 const COMMENT_PAGE = 50;
 
+const LISTENER_LIST_LIMIT = 100; // the most listeners shown to the host to pick guests from
+const MAX_PENDING_REQUESTS = 20; // people asking to speak at once; more than the host could ever read
+const stageLimiter = createLimiter({ name: "live-stage", limit: 60, windowMs: 10 * 60 * 1000 });
 const startLimiter = createLimiter({ name: "live-start", limit: 5, windowMs: 60 * 60 * 1000 });
 const joinLimiter = createLimiter({ name: "live-join", limit: 120, windowMs: 60 * 60 * 1000 });
 const signalLimiter = createLimiter({ name: "live-signal", limit: 600, windowMs: 5 * 60 * 1000 });
@@ -45,6 +58,10 @@ async function blockedFor(userId) {
   blockedCache.set(String(userId), ids);
   return ids;
 }
+
+// Who is on (or waiting for) the stage is read by everyone in the room every few seconds, so it is kept briefly too.
+// Anything that changes the stage clears it.
+const stageCache = createTtlCache(2_000);
 
 export const liveRouter = Router();
 liveRouter.use(requireAuth);
@@ -106,6 +123,7 @@ export async function endSession(session) {
     session.mode === "sfu" ? deleteSfuRoom(String(session._id)) : null,
   ]);
   memberCache.clear();
+  stageCache.clear();
 }
 
 async function listenerCount(session) {
@@ -123,6 +141,8 @@ async function serializeSession(session, host, viewerId) {
     listenerCount: await listenerCount(session),
     maxListeners: capacityOf(session),
     mode: session.mode ?? "mesh",
+    // How many listeners the host can bring on stage to speak (only big lives, which use the media server, have a stage).
+    maxGuests: session.mode === "sfu" ? MAX_STAGE_GUESTS : 0,
     ...pollHints(session),
   };
 }
@@ -183,6 +203,7 @@ async function loadMember(req, res) {
 // When one person blocks another, neither stays in the other's live.
 export async function removeListenersBetween(idA, idB) {
   memberCache.clear();
+  stageCache.clear();
   blockedCache.clear();
   const sessions = await LiveSession.find({ host: { $in: [idA, idB] } }).select("_id host mode");
   for (const s of sessions) {
@@ -322,6 +343,7 @@ liveRouter.post("/:id/join", async (req, res) => {
 liveRouter.post("/:id/leave", async (req, res) => {
   if (!validId(req.params.id)) return res.status(204).end();
   memberCache.clear();
+  stageCache.clear();
   await Promise.all([
     LiveListener.deleteOne({ session: req.params.id, user: req.user.id }),
     LiveSignal.deleteMany({ session: req.params.id, $or: [{ from: req.user.id }, { to: req.user.id }] }),
@@ -346,8 +368,171 @@ liveRouter.post("/:id/token", async (req, res) => {
   const { session, isHost } = found;
   if (session.mode !== "sfu") return res.status(400).json({ error: "This live doesn't use a media server" });
   const user = await User.findById(req.user.id).select("displayName");
-  const token = await sfuToken({ room: String(session._id), identity: req.user.id, name: user?.displayName ?? "Listener", canPublish: isHost });
+  // someone on stage who reconnects keeps their microphone permission
+  const onStage = !isHost && (await listenerRow(session._id, req.user.id))?.stage === "speaking";
+  const token = await sfuToken({ room: String(session._id), identity: req.user.id, name: user?.displayName ?? "Listener", canPublish: isHost || onStage });
   res.json({ url: process.env.LIVEKIT_URL, token });
+});
+
+// ---- The stage -------------------------------------------------------------------
+// In a big live the host can bring up to 9 listeners on stage to speak. A listener can raise a hand ("requested"); the
+// host invites someone ("invited") — from the raised hands or anyone listening — and they accept ("speaking"), which is
+// when the media server lets their microphone through. The host can send anyone back to listening at any time.
+const STAGE_NEEDS_MEDIA_SERVER = "Guests can speak only in lives that use the live audio service.";
+const stageRequired = (session, res) => {
+  if (session.mode === "sfu") return true;
+  res.status(409).json({ error: STAGE_NEEDS_MEDIA_SERVER });
+  return false;
+};
+const activeStageRows = (session) =>
+  LiveListener.find({ session: session._id, stage: { $ne: "listener" }, lastSeen: { $gt: listenerCutoff(session) }, expireAt: { $gt: new Date() } }).sort({ _id: 1 });
+const stageSlotsTaken = (session) =>
+  LiveListener.countDocuments({ session: session._id, stage: { $in: ["invited", "speaking"] }, lastSeen: { $gt: listenerCutoff(session) }, expireAt: { $gt: new Date() } });
+
+// Takes someone's microphone permission away. A person who isn't connected has nothing to take away.
+async function revokeSpeaking(session, userId) {
+  try {
+    await setSfuPublishing(String(session._id), userId, false);
+  } catch (err) {
+    if (!/not found|does not exist/i.test(err?.message ?? "")) console.error("Couldn't take a guest off the stage:", err.message);
+  }
+}
+
+async function stageSnapshot(session) {
+  const cached = stageCache.get(String(session._id));
+  if (cached) return cached;
+  const rows = await activeStageRows(session);
+  const users = await User.find({ _id: { $in: rows.map((r) => r.user) } });
+  const byId = new Map();
+  for (const u of users) byId.set(String(u._id), await toPublicUser(u));
+  const entries = rows.filter((r) => byId.has(String(r.user))).map((r) => ({ userId: String(r.user), stage: r.stage, user: byId.get(String(r.user)) }));
+  stageCache.set(String(session._id), entries);
+  return entries;
+}
+
+liveRouter.get("/:id/stage", async (req, res) => {
+  const found = await loadMember(req, res);
+  if (!found) return;
+  const { session, isHost } = found;
+  if (session.mode !== "sfu") return res.json({ enabled: false, maxGuests: 0, me: null, guests: [] });
+  const entries = await stageSnapshot(session);
+  const out = {
+    enabled: true,
+    maxGuests: MAX_STAGE_GUESTS,
+    me: isHost ? null : (entries.find((e) => e.userId === String(req.user.id))?.stage ?? "listener"),
+    guests: entries.filter((e) => e.stage === "speaking").map((e) => ({ user: e.user })),
+  };
+  if (isHost) {
+    out.requests = entries.filter((e) => e.stage === "requested").map((e) => ({ user: e.user }));
+    out.invited = entries.filter((e) => e.stage === "invited").map((e) => ({ user: e.user }));
+    // everyone else listening, so the host can invite someone who hasn't asked (only the host reads this, so it isn't cached)
+    const rows = await LiveListener.find({ session: session._id, stage: "listener", lastSeen: { $gt: listenerCutoff(session) }, expireAt: { $gt: new Date() } })
+      .sort({ _id: 1 })
+      .limit(LISTENER_LIST_LIMIT);
+    const users = await User.find({ _id: { $in: rows.map((r) => r.user) } });
+    const byId = new Map(users.map((u) => [String(u._id), u]));
+    out.listeners = (await Promise.all(rows.map((r) => (byId.has(String(r.user)) ? toPublicUser(byId.get(String(r.user))) : null)))).filter(Boolean).map((user) => ({ user }));
+  }
+  res.json(out);
+});
+
+// A listener asks the host if they can speak.
+liveRouter.post("/:id/stage/request", async (req, res) => {
+  const found = await loadMember(req, res);
+  if (!found) return;
+  const { session, isHost } = found;
+  if (!stageRequired(session, res)) return;
+  if (isHost) return res.status(400).json({ error: "You're the host" });
+  if (!(await stageLimiter.allow(req.user.id))) return res.status(429).json({ error: "Too many requests — slow down." });
+  const row = await listenerRow(session._id, req.user.id);
+  if (!row) return res.status(403).json({ error: "Join this live first" });
+  if (row.stage === "listener") {
+    if ((await LiveListener.countDocuments({ session: session._id, stage: "requested" })) >= MAX_PENDING_REQUESTS) {
+      return res.status(409).json({ error: "Lots of people are asking to speak right now — try again in a moment." });
+    }
+    await LiveListener.updateOne({ _id: row._id }, { $set: { stage: "requested" } });
+    stageCache.clear();
+  }
+  res.json({ stage: row.stage === "listener" ? "requested" : row.stage });
+});
+
+// A listener withdraws their request, turns down an invitation, or steps down from the stage.
+liveRouter.post("/:id/stage/leave", async (req, res) => {
+  const found = await loadMember(req, res);
+  if (!found) return;
+  const { session, isHost } = found;
+  if (!stageRequired(session, res)) return;
+  if (isHost) return res.status(400).json({ error: "You're the host" });
+  const row = await listenerRow(session._id, req.user.id);
+  if (!row) return res.status(403).json({ error: "Join this live first" });
+  if (row.stage !== "listener") {
+    await LiveListener.updateOne({ _id: row._id }, { $set: { stage: "listener" } });
+    stageCache.clear();
+    if (row.stage === "speaking") await revokeSpeaking(session, req.user.id);
+  }
+  res.json({ stage: "listener" });
+});
+
+// An invited listener says yes: their microphone is let through.
+liveRouter.post("/:id/stage/accept", async (req, res) => {
+  const found = await loadMember(req, res);
+  if (!found) return;
+  const { session, isHost } = found;
+  if (!stageRequired(session, res)) return;
+  if (isHost) return res.status(400).json({ error: "You're the host" });
+  const row = await listenerRow(session._id, req.user.id);
+  if (!row) return res.status(403).json({ error: "Join this live first" });
+  if (row.stage === "speaking") return res.json({ stage: "speaking" });
+  if (row.stage !== "invited") return res.status(409).json({ error: "The host hasn't invited you to speak" });
+  try {
+    await setSfuPublishing(String(session._id), req.user.id, true);
+  } catch (err) {
+    if (/not found|does not exist/i.test(err?.message ?? "")) {
+      return res.status(409).json({ error: "Connect to the live audio first, then try again." });
+    }
+    console.error("Couldn't let a guest speak:", err.message);
+    return res.status(503).json({ error: "Couldn't put you on the stage — please try again." });
+  }
+  await LiveListener.updateOne({ _id: row._id }, { $set: { stage: "speaking" } });
+  stageCache.clear();
+  res.json({ stage: "speaking" });
+});
+
+// The host invites a listener to speak (at most 9 at a time, counting those who haven't answered yet).
+liveRouter.post("/:id/stage/invite", async (req, res) => {
+  const found = await loadMember(req, res);
+  if (!found) return;
+  const { session, isHost } = found;
+  if (!stageRequired(session, res)) return;
+  if (!isHost) return res.status(403).json({ error: "Only the host can invite guests" });
+  const userId = req.body?.userId;
+  if (typeof userId !== "string" || !validId(userId)) return res.status(400).json({ error: "Choose a listener to invite" });
+  const row = await LiveListener.findOne({ session: session._id, user: userId, lastSeen: { $gt: listenerCutoff(session) }, expireAt: { $gt: new Date() } });
+  if (!row) return res.status(404).json({ error: "That listener isn't here" });
+  if (row.stage === "invited" || row.stage === "speaking") return res.json({ stage: row.stage });
+  if ((await stageSlotsTaken(session)) >= MAX_STAGE_GUESTS) {
+    return res.status(409).json({ error: `The stage is full (${MAX_STAGE_GUESTS} guests). Remove someone first.` });
+  }
+  await LiveListener.updateOne({ _id: row._id }, { $set: { stage: "invited" } });
+  stageCache.clear();
+  res.json({ stage: "invited" });
+});
+
+// The host turns down a request, takes back an invitation, or sends a guest back to listening.
+liveRouter.post("/:id/stage/remove", async (req, res) => {
+  const found = await loadMember(req, res);
+  if (!found) return;
+  const { session, isHost } = found;
+  if (!stageRequired(session, res)) return;
+  if (!isHost) return res.status(403).json({ error: "Only the host can do that" });
+  const userId = req.body?.userId;
+  if (typeof userId !== "string" || !validId(userId)) return res.status(400).json({ error: "Choose a guest" });
+  const row = await LiveListener.findOne({ session: session._id, user: userId, stage: { $ne: "listener" } });
+  if (!row) return res.status(404).json({ error: "That person isn't on the stage" });
+  await LiveListener.updateOne({ _id: row._id }, { $set: { stage: "listener" } });
+  stageCache.clear();
+  if (row.stage === "speaking") await revokeSpeaking(session, userId);
+  res.json({ stage: "listener" });
 });
 
 // ---- WebRTC handshake messages (browser-to-browser lives) ------------------
