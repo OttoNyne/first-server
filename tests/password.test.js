@@ -44,14 +44,14 @@ describe("changing your password", () => {
     expect((await login("old-password-1")).status).toBe(401);
   }, 30_000);
 
-  it("signs out every other session but keeps the one that changed the password", async () => {
+  it("signs out every other session, even one made in the same second, but keeps the one that changed the password", async () => {
     const sam = await signup();
     // A second session (e.g. another device), created before the change.
     const other = request.agent(app);
     await other.post("/api/auth/login").send({ email: "sam@example.com", password: "old-password-1" });
     expect((await other.get("/api/auth/me")).status).toBe(200);
 
-    await new Promise((r) => setTimeout(r, 1100)); // JWT issue times have 1-second resolution
+    // no pause: even a session created in the same second as the change must be signed out
     expect((await sam.put("/api/auth/password").send({ currentPassword: "old-password-1", newPassword: "brand-new-pass-2" })).status).toBe(204);
 
     expect((await other.get("/api/auth/me")).status).toBe(401);
@@ -82,4 +82,29 @@ describe("changing your password", () => {
     expect(blocked.status).toBe(429);
     expect((await login("old-password-1")).status).toBe(200);
   }, 60_000);
+
+  it("still accepts a session issued before sessions carried a password version, until the password changes", async () => {
+    const jwt = (await import("jsonwebtoken")).default;
+    const sam = await signup();
+    const legacy = jwt.sign({ id: (await sam.get("/api/auth/me")).body.user.id, username: "sam" }, process.env.JWT_SECRET, { expiresIn: "7d" });
+    const asLegacy = () => request(app).get("/api/auth/me").set("Cookie", `token=${legacy}`);
+    expect((await asLegacy()).status).toBe(200);
+    await new Promise((r) => setTimeout(r, 1100));
+    await sam.put("/api/auth/password").send({ currentPassword: "old-password-1", newPassword: "brand-new-pass-2" });
+    expect((await asLegacy()).status).toBe(401);
+  }, 30_000);
+
+  it("signs out a session created in the very same second as the password change (deterministic)", async () => {
+    const jwt = (await import("jsonwebtoken")).default;
+    const { User } = await import("../models/User.js");
+    const sam = await signup();
+    const id = (await sam.get("/api/auth/me")).body.user.id;
+    // a session issued under password version 0 (no change yet)
+    const token = jwt.sign({ id, username: "sam", pv: 0 }, process.env.JWT_SECRET, { expiresIn: "7d" });
+    const asThem = () => request(app).get("/api/auth/me").set("Cookie", `token=${token}`);
+    expect((await asThem()).status).toBe(200);
+    // the password changes straight away: same wall-clock second as the token's issue time
+    await User.updateOne({ _id: id }, { $set: { passwordChangedAt: new Date() } });
+    expect((await asThem()).status).toBe(401);
+  }, 30_000);
 });

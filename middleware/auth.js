@@ -3,9 +3,12 @@ import { User } from "../models/User.js";
 
 export const AUTH_COOKIE_NAME = "token";
 
+const passwordVersion = (user) => (user.passwordChangedAt ? user.passwordChangedAt.getTime() : 0);
+
 export function signAuthToken(user) {
   return jwt.sign(
-    { id: user._id.toString(), username: user.username },
+    // pv = the password version (when the password last changed, in ms) this session was issued under.
+    { id: user._id.toString(), username: user.username, pv: passwordVersion(user) },
     process.env.JWT_SECRET,
     { expiresIn: "7d" }
   );
@@ -54,8 +57,15 @@ async function resolveSession(token) {
   const payload = jwt.verify(token, process.env.JWT_SECRET); // throws if forged/expired
   const user = await User.findById(payload.id).select("passwordChangedAt");
   if (!user) return null;
-  const changedAtSeconds = user.passwordChangedAt ? Math.floor(user.passwordChangedAt.getTime() / 1000) : 0;
-  if (payload.iat < changedAtSeconds) return null;
+  if (typeof payload.pv === "number") {
+    // Exact: the session is valid only if the password hasn't changed since it was issued, however
+    // close together the two happened (whole-second timestamps can't tell apart events in one second).
+    if (payload.pv !== passwordVersion(user)) return null;
+  } else {
+    // Sessions issued before pv existed: the older whole-second comparison.
+    const changedAtSeconds = user.passwordChangedAt ? Math.floor(user.passwordChangedAt.getTime() / 1000) : 0;
+    if (payload.iat < changedAtSeconds) return null;
+  }
   return payload;
 }
 

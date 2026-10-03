@@ -131,7 +131,7 @@ describe("forgotten password", () => {
     expect((await alice.agent.get("/api/auth/me")).status).toBe(200);
     await forgot("alice@example.com");
     await mailArrives();
-    await new Promise((r) => setTimeout(r, 1100)); // JWT issue times have 1-second resolution
+    // (no pause: a session made in the same second as the reset is signed out too)
     await reset(tokenFrom(outbox[0]), "a-brand-new-pass");
 
     expect((await alice.agent.get("/api/auth/me")).status).toBe(401);
