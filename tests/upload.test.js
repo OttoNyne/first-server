@@ -97,6 +97,24 @@ describe("POST /api/media/upload", () => {
     expect((await StoredAsset.findOne({ owner: userId })).resourceType).toBe("video");
   });
 
+  it("accepts the audio types iPhones use (m4a, aac, x-wav) for songs", async () => {
+    for (const type of ["audio/x-m4a", "audio/m4a", "audio/aac", "audio/x-wav", "audio/mp4", "audio/mp3"]) {
+      nextResult = () => ({
+        result: { secure_url: "https://res.cloudinary.com/demo/video/upload/v1/creativeselect/tracks/s.m4a", public_id: "creativeselect/tracks/s", bytes: 70 },
+      });
+      const res = await send("tracks", type);
+      expect(res.status, type).toBe(201);
+    }
+  });
+
+  it("still keeps non-audio files out of songs, and audio out of picture uploads", async () => {
+    nextResult = () => ({ result: {} });
+    expect((await send("tracks", "application/pdf")).status).toBe(400);
+    expect((await send("tracks", "image/png")).status).toBe(400);
+    expect((await send("portfolio", "audio/x-m4a")).status).toBe(400);
+    expect((await send("avatars", "audio/aac")).status).toBe(400);
+  });
+
   it("rejects a file type that isn't allowed for the purpose", async () => {
     nextResult = () => ({ result: {} });
     const res = await send("avatars", "audio/mpeg");

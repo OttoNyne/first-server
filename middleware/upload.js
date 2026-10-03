@@ -18,7 +18,14 @@ const PURPOSE_MIME = {
   // Portfolio videos: the 30-second limit is enforced after upload (the
   // duration is only known once Cloudinary has the file) — see routes/media.
   portfolio: [...IMAGE_MIME, "video/mp4", "video/webm", "video/quicktime"],
-  tracks: ["audio/mpeg", "audio/mp4", "audio/wav", "audio/ogg"],
+  // iPhones label their audio differently from other devices: a .m4a from Voice Memos or Files
+  // arrives as audio/x-m4a (or audio/m4a, audio/aac), and a .wav as audio/x-wav. All are accepted.
+  tracks: [
+    "audio/mpeg", "audio/mp3",
+    "audio/mp4", "audio/x-m4a", "audio/m4a", "audio/aac", "audio/x-aac",
+    "audio/wav", "audio/x-wav", "audio/wave",
+    "audio/ogg", "audio/webm",
+  ],
 };
 
 function purposeFor(req) {
