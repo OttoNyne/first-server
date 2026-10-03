@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { mailAvailable, sendMail } from "../utils/mailer.js";
+import { describeMail, mailAvailable, sendMail } from "../utils/mailer.js";
 
 const mail = { to: "ada@example.com", subject: "Hello", text: "Body with a secret link" };
 const saved = { ...process.env };
@@ -89,5 +89,28 @@ describe("mailAvailable", () => {
     expect(mailAvailable()).toBe(false); // needs a sender too
     process.env.MAIL_FROM = "noreply@example.com";
     expect(mailAvailable()).toBe(true);
+  });
+});
+
+describe("diagnostics", () => {
+  it("a refused email's log says which sender was used, without the key or the message", async () => {
+    process.env.RESEND_API_KEY = "re_super_secret_key";
+    process.env.MAIL_FROM = "CreativesSelect <noreply@creativesselect.com>";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response('{"message":"The domain is not verified"}', { status: 403 })));
+    await sendMail(mail);
+    const logged = console.error.mock.calls.flat().join(" ");
+    expect(logged).toMatch(/sent as CreativesSelect <noreply@creativesselect.com>/);
+    expect(logged).toMatch(/403/);
+    expect(logged).not.toMatch(/re_super_secret_key/);
+    expect(logged).not.toMatch(/secret link/);
+  });
+
+  it("describes how mail will be sent for the startup log, never revealing the key", () => {
+    expect(describeMail()).toMatch(/not configured/);
+    process.env.RESEND_API_KEY = "re_super_secret_key";
+    expect(describeMail()).toMatch(/MAIL_FROM is not/);
+    process.env.MAIL_FROM = "CreativesSelect <noreply@creativesselect.com>";
+    expect(describeMail()).toBe("Mail: sending through Resend as CreativesSelect <noreply@creativesselect.com>");
+    expect(describeMail()).not.toMatch(/re_super_secret_key/);
   });
 });

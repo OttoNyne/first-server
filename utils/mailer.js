@@ -19,14 +19,24 @@ export function mailAvailable() {
 //                                 is printed; in production only a warning is
 //                                 logged (the text can hold a reset link).
 //
+// A one-line, secret-free summary of how mail will be sent, logged when the server starts so the
+// hosting logs show which sender is actually in effect (the API key is never included).
+export function describeMail() {
+  if (process.env.RESEND_API_KEY) {
+    return process.env.MAIL_FROM ? `Mail: sending through Resend as ${process.env.MAIL_FROM}` : "Mail: RESEND_API_KEY is set but MAIL_FROM is not — emails will fail";
+  }
+  return "Mail: not configured (password reset by email is unavailable)";
+}
+
 // It never throws: callers send mail in the background and a delivery problem
 // must not change what the user sees (that would leak whether an address exists).
 export async function sendMail({ to, subject, text }) {
   const isProduction = process.env.NODE_ENV === "production";
+  let from; // which sender was used, for the failure log
   try {
     const key = process.env.RESEND_API_KEY;
     if (key) {
-      const from = process.env.MAIL_FROM;
+      from = process.env.MAIL_FROM;
       if (!from) throw new Error("MAIL_FROM is not set");
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
@@ -52,7 +62,7 @@ export async function sendMail({ to, subject, text }) {
     }
     return { sent: false };
   } catch (err) {
-    console.error(`MAIL FAILED (subject "${subject}"):`, err.message);
+    console.error(`MAIL FAILED (subject "${subject}"${from ? `, sent as ${from}` : ""}):`, err.message);
     return { sent: false };
   }
 }
