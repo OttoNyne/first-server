@@ -7,6 +7,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { areBlocked, areFriends } from "../utils/visibility.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { createLimiter } from "../utils/rateLimit.js";
+import { Notification } from "../models/Notification.js";
 
 // Direct messages are friends-only, which is what keeps them from becoming an
 // unsolicited-message channel. The per-user limit stops a friend account from
@@ -29,6 +30,24 @@ const toPublicMessage = (m, viewerId) => ({
   readAt: m.readAt,
   createdAt: m.createdAt,
 });
+
+// Tells the recipient they have a new message. One notification per sender while it is unread: another message
+// from the same person replaces it (moving it to the top) with a higher count, so a chatty friend can't flood the list.
+// Opening the conversation marks it read. A failure here must never stop the message from being sent.
+async function notifyOfMessage(senderId, recipientId) {
+  try {
+    const where = { recipient: recipientId, type: "message", isRead: false, "payload.actorId": String(senderId) };
+    const previous = await Notification.findOne(where);
+    if (previous) await previous.deleteOne();
+    await Notification.create({
+      recipient: recipientId,
+      type: "message",
+      payload: { actorId: String(senderId), count: (previous?.payload?.count ?? 0) + 1 },
+    });
+  } catch (err) {
+    console.error("Couldn't notify of a message:", err.message);
+  }
+}
 
 // Resolves :username to a friend the caller may message, or sends the error.
 async function findFriend(req, res) {
@@ -115,6 +134,8 @@ messagesRouter.get("/with/:username", async (req, res) => {
   const page = newestFirst.slice(0, PAGE_SIZE).reverse();
 
   await Message.updateMany({ sender: other._id, recipient: req.user.id, readAt: null }, { $set: { readAt: new Date() } });
+  // reading the conversation also clears its notification
+  await Notification.updateMany({ recipient: req.user.id, type: "message", "payload.actorId": String(other._id) }, { $set: { isRead: true } });
 
   res.json({
     user: await toPublicUser(other, req.user.id),
@@ -143,6 +164,7 @@ messagesRouter.post("/with/:username", async (req, res) => {
     pair: pairKey(req.user.id, other._id),
     body,
   });
+  await notifyOfMessage(req.user.id, other._id);
   res.status(201).json({ message: toPublicMessage(message, req.user.id) });
 });
 

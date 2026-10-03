@@ -10,7 +10,7 @@ notificationsRouter.use(requireAuth);
 
 notificationsRouter.get("/", async (req, res) => {
   const notifications = await Notification.find({ recipient: req.user.id })
-    .sort("-createdAt")
+    .sort("-createdAt -_id")
     .limit(50);
 
   const actorIds = notifications.map((n) => n.payload?.actorId).filter(Boolean);

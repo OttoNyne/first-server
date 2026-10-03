@@ -4,7 +4,8 @@ import { Comment } from "../models/Comment.js";
 import { Friendship } from "../models/Friendship.js";
 import { requireAuth } from "../middleware/auth.js";
 import { toPublicPost } from "../utils/serialize.js";
-import { getProfileForViewer } from "../utils/visibility.js";
+import { assertVisible, getProfileForViewer } from "../utils/visibility.js";
+import mongoose from "mongoose";
 import { deleteStoredAssetIfUnused } from "../services/storedAssets.js";
 
 export const postsRouter = Router();
@@ -44,6 +45,21 @@ postsRouter.get("/user/:username", async (req, res) => {
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
+});
+
+// One post, for the page a notification links to. The same rule as everywhere else: if its author's profile isn't visible
+// to you (private and not a friend, or blocked either way) it answers 404 exactly as if the post did not exist.
+postsRouter.get("/:id", async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: "Post not found" });
+  const post = await Post.findById(req.params.id).populate("author");
+  if (!post || !post.author) return res.status(404).json({ error: "Post not found" });
+  try {
+    await assertVisible(post.author, req.user.id);
+  } catch {
+    return res.status(404).json({ error: "Post not found" });
+  }
+  const [withCount] = await withCommentCounts([post], req.user.id);
+  res.json({ post: withCount });
 });
 
 // How a picture is framed: its shape, how far it is zoomed in (1 to 3 times) and which part
