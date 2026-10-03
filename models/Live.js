@@ -10,6 +10,10 @@ const liveSessionSchema = new mongoose.Schema(
     host: { type: ObjectId, ref: "User", required: true },
     title: { type: String, required: true, maxlength: 80 },
     status: { type: String, enum: ["live", "ended"], default: "live" },
+    // How the audio travels: straight between browsers (a few listeners) or through a media server (50-100).
+    // Fixed when the live starts, so changing the server's settings never disturbs a live in progress.
+    mode: { type: String, enum: ["mesh", "sfu"], default: "mesh" },
+    capacity: { type: Number, default: 8 },
     lastHeartbeat: { type: Date, required: true },
     endedAt: { type: Date, default: null },
     expireAt: { type: Date, expires: 0 },
