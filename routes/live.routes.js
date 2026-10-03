@@ -9,6 +9,7 @@ import { assertVisible, blockedUserIds } from "../utils/visibility.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { createTtlCache } from "../utils/ttlCache.js";
+import { requireVerifiedEmail } from "../middleware/requireVerifiedEmail.js";
 import { MESH_MAX_LISTENERS, createSfuRoom, deleteSfuRoom, removeSfuParticipant, sfuConfigured, sfuMaxListeners, sfuToken } from "../services/livekit.js";
 
 // Voice-only live rooms. The audio itself never touches this server. Two ways it can travel:
@@ -239,7 +240,7 @@ liveRouter.get("/", async (req, res) => {
   });
 });
 
-liveRouter.post("/", async (req, res) => {
+liveRouter.post("/", requireVerifiedEmail, async (req, res) => {
   const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
   if (!title) return res.status(400).json({ error: "Give your live a title" });
   if (title.length > 80) return res.status(400).json({ error: "Titles can be up to 80 characters" });

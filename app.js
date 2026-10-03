@@ -21,6 +21,7 @@ import { tracksRouter } from "./routes/tracks.routes.js";
 import { tasksRouter } from "./routes/tasks.routes.js";
 import { messagesRouter } from "./routes/messages.routes.js";
 import { liveRouter } from "./routes/live.routes.js";
+import { securityRouter } from "./routes/security.routes.js";
 import { requireTrustedOrigin } from "./middleware/csrf.js";
 import { isAllowedOrigin } from "./utils/origins.js";
 
@@ -59,6 +60,7 @@ app.get("/api/hello", (req, res) => {
 });
 
 app.use("/api/auth", authRouter);
+app.use("/api/auth", securityRouter);
 app.use("/api/profiles", profilesRouter);
 // commentsRouter must be mounted before postsRouter: it defines the more
 // specific /posts/:postId/comments routes (deliberately public for GET),

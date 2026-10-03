@@ -7,6 +7,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { assertVisible } from "../utils/visibility.js";
 import { createLimiter } from "../utils/rateLimit.js";
+import { verifiedEmailRequired, userHasVerifiedEmail } from "../middleware/requireVerifiedEmail.js";
 
 // Keep the public board and other users' notifications from being flooded.
 const POST_LIMIT = 10;
@@ -144,6 +145,9 @@ tasksRouter.post("/", async (req, res) => {
   }
   const { title, description, priority, dueDate, isPublic } = req.body;
   // Only public requests reach other people, so only those are capped.
+  if (isPublic === true && verifiedEmailRequired() && !(await userHasVerifiedEmail(req.user.id))) {
+    return res.status(403).json({ error: "Confirm your email address first — check your inbox for the link.", code: "email_not_verified" });
+  }
   if (isPublic === true && !(await publicPostLimit.allow(req.user.id))) {
     return res.status(429).json({ error: `Board post limit reached (${POST_LIMIT} per hour) — try again later` });
   }

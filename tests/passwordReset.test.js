@@ -3,6 +3,7 @@ import request from "supertest";
 import { connectTestDb, clearTestDb, disconnectTestDb } from "./helpers/testDb.js";
 
 // Mail is captured instead of sent. `outbox` holds what would have gone out.
+// Signing up also sends a "confirm your email" message; these tests are about the reset emails, so that one is left out.
 const outbox = [];
 let mailShouldFail = false;
 let mailIsAvailable = true;
@@ -10,7 +11,7 @@ vi.mock("../utils/mailer.js", () => ({
   mailAvailable: () => mailIsAvailable,
   sendMail: vi.fn(async (mail) => {
     if (mailShouldFail) return { sent: false };
-    outbox.push(mail);
+    if (!/Confirm your/.test(mail.subject)) outbox.push(mail);
     return { sent: true };
   }),
 }));

@@ -20,6 +20,7 @@ import { GroupMessage } from "../models/GroupMessage.js";
 import { PasswordReset } from "../models/PasswordReset.js";
 import { LiveSession, LiveListener, LiveSignal, LiveComment } from "../models/Live.js";
 import { deleteSfuRoom } from "./livekit.js";
+import { EmailVerification } from "../models/EmailVerification.js";
 import { deleteAllStoredAssets } from "./storedAssets.js";
 
 // Groups the user created: an empty group is deleted; otherwise it is handed
@@ -74,6 +75,7 @@ export async function deleteAccount(userId) {
   await Message.deleteMany({ $or: [{ sender: id }, { recipient: id }] });
   await GroupMessage.deleteMany({ sender: id });
   await PasswordReset.deleteMany({ user: id });
+  await EmailVerification.deleteMany({ user: id });
   // Voice lives: ones they hosted (with everything in them), and their part in others.
   const hostedSessions = await LiveSession.find({ host: id }).select("_id mode");
   const hosted = hostedSessions.map((s) => s._id);

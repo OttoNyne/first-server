@@ -10,6 +10,7 @@ import { UsernameHistory } from "../models/UsernameHistory.js";
 import { PasswordReset } from "../models/PasswordReset.js";
 import { sendMail, mailAvailable } from "../utils/mailer.js";
 import { primaryClientUrl } from "../utils/origins.js";
+import { sendVerificationEmail } from "../services/emailVerification.js";
 import { createHash, randomBytes } from "node:crypto";
 
 export const authRouter = Router();
@@ -58,6 +59,9 @@ authRouter.post("/register", async (req, res) => {
     const user = new User({ email, username, displayName });
     user.password = password;
     await user.save();
+
+    // Ask them to confirm the address. Sent after we've replied, and a failure never affects sign-up.
+    sendVerificationEmail(user).catch((err) => console.error("Verification email failed:", err.message));
 
     const token = signAuthToken(user);
     setAuthCookie(res, token);
@@ -210,6 +214,8 @@ authRouter.post("/reset-password", async (req, res) => {
     }
 
     user.password = parsed.data.newPassword;
+    // They opened a link we emailed to this address, which also proves they own it.
+    user.emailVerified = true;
     // Every existing session stops working, so whoever had access with the old
     // password (or a stolen session) is signed out. The person resetting signs in afresh.
     user.passwordChangedAt = new Date();

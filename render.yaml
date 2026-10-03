@@ -40,3 +40,5 @@ services:
         sync: false
       - key: LIVE_MAX_LISTENERS
         sync: false
+      - key: REQUIRE_VERIFIED_EMAIL
+        sync: false

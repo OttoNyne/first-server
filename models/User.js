@@ -16,6 +16,8 @@ const userSchema = new mongoose.Schema(
     // Sessions (JWTs) issued before this moment are rejected — set when the
     // password changes so old/stolen sessions stop working.
     passwordChangedAt: { type: Date, default: null },
+    // Whether they have opened the link we emailed to confirm the address is theirs.
+    emailVerified: { type: Boolean, default: false },
     theme: {
       bgColor: String,
       textColor: String,
@@ -47,7 +49,7 @@ userSchema.methods.comparePassword = function (candidate) {
 userSchema.methods.toPublic = function ({ includeEmail = false } = {}) {
   return {
     id: this._id,
-    ...(includeEmail ? { email: this.email } : {}),
+    ...(includeEmail ? { email: this.email, emailVerified: this.emailVerified } : {}),
     username: this.username,
     displayName: this.displayName,
     bio: this.bio,
