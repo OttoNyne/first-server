@@ -14,6 +14,7 @@ import { ScheduledLive } from "../models/ScheduledLive.js";
 import { BlogEntry } from "../models/BlogEntry.js";
 import { Bulletin } from "../models/Bulletin.js";
 import { ProfileView } from "../models/ProfileView.js";
+import { Album } from "../models/Album.js";
 import { Block } from "../models/Block.js";
 import { Report } from "../models/Report.js";
 import { Task } from "../models/Task.js";
@@ -78,6 +79,7 @@ export async function deleteAccount(userId) {
   const mediaIds = (await MediaItem.find({ owner: id }).select("_id")).map((m) => m._id);
   await MediaReaction.deleteMany({ $or: [{ user: id }, { item: { $in: mediaIds } }] });
   await MediaItem.deleteMany({ owner: id });
+  await Album.deleteMany({ owner: id });
   await Track.deleteMany({ owner: id });
   await Task.deleteMany({ owner: id });
   // Messages they sent or received (the other person's copy is the same document).

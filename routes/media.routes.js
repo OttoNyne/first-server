@@ -1,7 +1,9 @@
 import { Router } from "express";
+import mongoose from "mongoose";
 import { v2 as cloudinary } from "cloudinary";
 import { MediaItem } from "../models/MediaItem.js";
 import { MediaReaction } from "../models/MediaReaction.js";
+import { Album } from "../models/Album.js";
 import { User } from "../models/User.js";
 import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { upload } from "../middleware/upload.js";
@@ -175,6 +177,25 @@ mediaRouter.put("/:id/reaction", requireAuth, async (req, res) => {
   }
   const summary = (await reactionSummary([item._id], req.user.id)).get(String(item._id));
   res.json({ likes: summary?.likes ?? 0, dislikes: summary?.dislikes ?? 0, myReaction: summary?.myReaction ?? 0 });
+});
+
+// Put a piece in one of your albums, or take it out (`{album: id}` or `{album: null}`). Only the owner, and only into the owner's own album.
+mediaRouter.patch("/:id", requireAuth, async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: "Media item not found" });
+  const item = await MediaItem.findOne({ _id: req.params.id, owner: req.user.id });
+  if (!item) return res.status(404).json({ error: "Media item not found" });
+  const album = req.body?.album;
+  if (album === undefined) return badRequest(res, "Say which album, or null for none");
+  if (album === null) {
+    item.album = null;
+  } else {
+    if (typeof album !== "string" || !mongoose.isValidObjectId(album) || !(await Album.exists({ _id: album, owner: req.user.id }))) {
+      return res.status(404).json({ error: "Album not found" });
+    }
+    item.album = album;
+  }
+  await item.save();
+  res.json({ item: toPublicMediaItem(item) });
 });
 
 mediaRouter.delete("/:id", requireAuth, async (req, res) => {

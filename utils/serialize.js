@@ -26,6 +26,7 @@ export function toPublicMediaItem(item, reactions = {}) {
     isAiImage: item.isAiImage,
     startSeconds: item.startSeconds ?? 0,
     durationSeconds: item.durationSeconds ?? null,
+    albumId: item.album ?? null,
     likes: reactions.likes ?? 0,
     dislikes: reactions.dislikes ?? 0,
     myReaction: reactions.myReaction ?? 0,

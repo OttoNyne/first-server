@@ -11,6 +11,8 @@ const mediaItemSchema = new mongoose.Schema(
     // from here) and, for uploaded videos, the measured length in seconds.
     startSeconds: { type: Number, default: 0, min: 0 },
     durationSeconds: { type: Number },
+    // The album this piece is in, if any (see models/Album.js).
+    album: { type: mongoose.Schema.Types.ObjectId, ref: "Album", default: null },
   },
   { timestamps: true }
 );
