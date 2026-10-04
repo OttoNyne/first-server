@@ -42,6 +42,13 @@ export async function assertVisible(user, viewerId) {
     throw err;
   }
 
+  // A suspended account's profile (and so everything reached through it) is not found, except by the person themself.
+  if (user.suspendedAt && String(user._id) !== String(viewerId)) {
+    const err = new Error("User not found");
+    err.status = 404;
+    throw err;
+  }
+
   if (viewerId && (await areBlocked(viewerId, user._id))) {
     const err = new Error("Profile not available");
     err.status = 403;

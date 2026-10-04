@@ -27,6 +27,7 @@ profilesRouter.get("/", requireAuth, async (req, res) => {
   if (!search) return res.json({ users: [] });
   const pattern = escapeRegex(search);
   const users = await User.find({
+    suspendedAt: null,
     $or: [{ username: { $regex: pattern, $options: "i" } }, { displayName: { $regex: pattern, $options: "i" } }],
   }).limit(20);
   res.json({ users: await Promise.all(users.map((u) => toPublicUser(u, req.user.id))) });
@@ -39,7 +40,7 @@ const MAX_DISCOVER_PAGE = 50;
 // New creatives, newest first, optionally only those with a tag. Private profiles are never listed (their tags are as
 // private as the rest of them), and nobody who has blocked you, or whom you have blocked, appears.
 profilesRouter.get("/discover", requireAuth, async (req, res) => {
-  const filter = { isPrivate: { $ne: true }, _id: { $nin: [...(await blockedUserIds(req.user.id)), req.user.id] } };
+  const filter = { isPrivate: { $ne: true }, suspendedAt: null, _id: { $nin: [...(await blockedUserIds(req.user.id)), req.user.id] } };
   if (req.query.tag !== undefined) {
     const tag = normalizeTag(typeof req.query.tag === "string" ? req.query.tag : "");
     if (!isValidTag(tag)) return res.status(400).json({ error: "That isn't a valid tag" });
@@ -57,7 +58,7 @@ profilesRouter.get("/discover", requireAuth, async (req, res) => {
 // The tags people use, most used first (public profiles only); `q` narrows them to those starting with it, for suggestions.
 profilesRouter.get("/tags", requireAuth, async (req, res) => {
   const q = typeof req.query.q === "string" ? normalizeTag(req.query.q) : "";
-  const match = { isPrivate: { $ne: true }, "tags.0": { $exists: true } };
+  const match = { isPrivate: { $ne: true }, suspendedAt: null, "tags.0": { $exists: true } };
   const pipeline = [{ $match: match }, { $unwind: "$tags" }];
   if (q) pipeline.push({ $match: { tags: { $regex: `^${escapeRegex(q)}` } } });
   pipeline.push({ $group: { _id: "$tags", count: { $sum: 1 } } }, { $sort: { count: -1, _id: 1 } }, { $limit: 24 });

@@ -30,6 +30,7 @@ import { albumsRouter } from "./routes/albums.routes.js";
 import { groupBoardRouter } from "./routes/groupBoard.routes.js";
 import { invitesRouter } from "./routes/invites.routes.js";
 import { onboardingRouter } from "./routes/onboarding.routes.js";
+import { adminRouter } from "./routes/admin.routes.js";
 import { securityRouter } from "./routes/security.routes.js";
 import { requireTrustedOrigin } from "./middleware/csrf.js";
 import { isAllowedOrigin } from "./utils/origins.js";
@@ -99,6 +100,7 @@ app.use("/api/bulletins", bulletinsRouter);
 app.use("/api/activity", activityRouter);
 app.use("/api/profile-views", profileViewsRouter);
 app.use("/api/onboarding", onboardingRouter);
+app.use("/api/admin", adminRouter);
 app.use("/api/live", liveRouter);
 
 app.use(errorHandler);

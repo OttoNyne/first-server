@@ -55,8 +55,13 @@ export function clearAuthCookie(res) {
 // still just what's in the token.)
 async function resolveSession(token) {
   const payload = jwt.verify(token, process.env.JWT_SECRET); // throws if forged/expired
-  const user = await User.findById(payload.id).select("passwordChangedAt");
+  const user = await User.findById(payload.id).select("passwordChangedAt suspendedAt");
   if (!user) return null;
+  if (user.suspendedAt) {
+    const err = new Error("This account has been suspended");
+    err.name = "SuspendedError";
+    throw err;
+  }
   if (typeof payload.pv === "number") {
     // Exact: the session is valid only if the password hasn't changed since it was issued, however
     // close together the two happened (whole-second timestamps can't tell apart events in one second).
@@ -80,6 +85,9 @@ export async function requireAuth(req, res, next) {
   } catch (err) {
     // A bad/expired token is the client's problem; anything else (e.g. the
     // database being down) is ours and must not masquerade as a logout.
+    if (err?.name === "SuspendedError") {
+      return res.status(403).json({ error: "This account has been suspended", code: "account_suspended" });
+    }
     if (err?.name === "JsonWebTokenError" || err?.name === "TokenExpiredError" || err?.name === "NotBeforeError") {
       return res.status(401).json({ error: "Invalid or expired session" });
     }
@@ -101,7 +109,7 @@ export async function attachUserIfPresent(req, res, next) {
     } catch (err) {
       // An invalid/expired/revoked token is treated as anonymous; a real
       // server error is not swallowed.
-      const clientError = ["JsonWebTokenError", "TokenExpiredError", "NotBeforeError"].includes(err?.name);
+      const clientError = ["JsonWebTokenError", "TokenExpiredError", "NotBeforeError", "SuspendedError"].includes(err?.name);
       if (!clientError) return next(err);
     }
   }

@@ -5,6 +5,10 @@ import { Friendship } from "../models/Friendship.js";
 import { Report } from "../models/Report.js";
 import { requireAuth } from "../middleware/auth.js";
 import { removeListenersBetween } from "./live.routes.js";
+import mongoose from "mongoose";
+import { createLimiter } from "../utils/rateLimit.js";
+import { cleanLine } from "../utils/profileFields.js";
+import { loadTarget } from "../services/moderation.js";
 
 export const moderationRouter = Router();
 moderationRouter.use(requireAuth);
@@ -43,13 +47,29 @@ moderationRouter.delete("/users/:username/block", async (req, res) => {
 
 const REPORT_TARGET_TYPES = ["user", "post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply"];
 
+const reportLimiter = createLimiter({ name: "report", limit: 30, windowMs: 60 * 60 * 1000 });
+
 moderationRouter.post("/reports", async (req, res) => {
-  const { targetType, targetId, reason } = req.body;
+  const { targetType, targetId } = req.body ?? {};
   if (!REPORT_TARGET_TYPES.includes(targetType)) {
     return res.status(400).json({ error: "Invalid targetType" });
   }
+  const reason = typeof req.body?.reason === "string" ? cleanLine(req.body.reason) : "";
   if (!targetId || !reason) {
     return res.status(400).json({ error: "targetId and reason are required" });
+  }
+  if (reason.length > 500) return res.status(400).json({ error: "Reasons can be up to 500 characters" });
+  if (!mongoose.isValidObjectId(targetId)) return res.status(400).json({ error: "targetId isn't valid" });
+  if (targetType === "user" && String(targetId) === req.user.id) return res.status(400).json({ error: "You can't report yourself" });
+  // Only things that exist can be reported, so the queue doesn't fill with references to nothing.
+  if (!(await loadTarget(targetType, targetId, req.user.id)).exists) return res.status(404).json({ error: "That doesn't exist any more" });
+
+  // Reporting the same thing twice while the first report is still waiting changes nothing.
+  const already = await Report.findOne({ reporter: req.user.id, targetType, targetId, status: "open" });
+  if (already) return res.status(200).json({ report: already, duplicate: true });
+  if (!(await reportLimiter.allow(req.user.id))) {
+    res.set("Retry-After", String(reportLimiter.windowSeconds));
+    return res.status(429).json({ error: "You've sent a lot of reports — try again later." });
   }
 
   const report = await Report.create({ reporter: req.user.id, targetType, targetId, reason });

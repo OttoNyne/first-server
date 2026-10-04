@@ -72,6 +72,8 @@ jobs:
           PORT: "5000"
           # emails are written to files here instead of being sent; the browser tests read them
           MAIL_OUTBOX_DIR: ${{ runner.temp }}/mail
+          # who counts as a moderator in the browser tests (one address per browser project, so each can sign up its own)
+          ADMIN_EMAILS: mod-chromium@example.com,mod-webkit@example.com,mod-iphone@example.com
         run: |
           npm ci
           nohup node server.js > api.log 2>&1 &

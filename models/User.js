@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { WALLPAPER_MOTIONS } from "../utils/wallpaperMotion.js";
 import { cleanHidden, completeOrder } from "../utils/profileSections.js";
+import { isAdminUser } from "../utils/admin.js";
 
 const userSchema = new mongoose.Schema(
   {
@@ -28,6 +29,9 @@ const userSchema = new mongoose.Schema(
     bulletinsSeenAt: { type: Date, default: null },
     // When they hid the getting-started checklist (see routes/onboarding.routes.js).
     onboardingDismissedAt: { type: Date, default: null },
+    // A moderator has suspended the account: it can't sign in, its sessions stop working and its profile is hidden (see services/moderation.js).
+    suspendedAt: { type: Date, default: null },
+    suspensionNote: { type: String, default: "", maxlength: 500 },
     // "Online now" / "active today": when their page last checked in, and whether their friends may see it (see utils/activity.js).
     lastActiveAt: { type: Date, default: null },
     showActivity: { type: Boolean, default: true },
@@ -69,7 +73,7 @@ userSchema.methods.comparePassword = function (candidate) {
 userSchema.methods.toPublic = function ({ includeEmail = false } = {}) {
   return {
     id: this._id,
-    ...(includeEmail ? { email: this.email, emailVerified: this.emailVerified, showActivity: this.showActivity !== false, profileViews: this.profileViews === true } : {}),
+    ...(includeEmail ? { email: this.email, emailVerified: this.emailVerified, showActivity: this.showActivity !== false, profileViews: this.profileViews === true, isAdmin: isAdminUser(this) } : {}),
     username: this.username,
     displayName: this.displayName,
     bio: this.bio,

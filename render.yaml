@@ -42,3 +42,6 @@ services:
         sync: false
       - key: REQUIRE_VERIFIED_EMAIL
         sync: false
+      # Comma-separated email addresses of the site's moderators (each must also be confirmed on the account). Without it nobody can use the moderation review screen.
+      - key: ADMIN_EMAILS
+        sync: false

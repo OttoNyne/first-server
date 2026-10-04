@@ -105,6 +105,9 @@ authRouter.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
+    // Said only after the password was right, so it can't be used to find out which accounts are suspended.
+    if (user.suspendedAt) return res.status(403).json({ error: "This account has been suspended. If you think that is a mistake, contact the site's team.", code: "account_suspended" });
+
     const token = signAuthToken(user);
     setAuthCookie(res, token);
     res.status(200).json({ user: await toPublicUser(user, user._id) });
