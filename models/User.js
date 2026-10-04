@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { WALLPAPER_MOTIONS } from "../utils/wallpaperMotion.js";
+import { cleanHidden, completeOrder } from "../utils/profileSections.js";
 
 const userSchema = new mongoose.Schema(
   {
@@ -19,6 +20,9 @@ const userSchema = new mongoose.Schema(
     mood: { type: String, default: "", maxlength: 60 },
     listeningTo: { type: String, default: "", maxlength: 80 },
     tags: { type: [String], default: [] },
+    // The order of the sections below the introduction, and which of them are hidden (see utils/profileSections.js).
+    sectionOrder: { type: [String], default: [] },
+    hiddenSections: { type: [String], default: [] },
     isPrivate: { type: Boolean, default: false },
     // Sessions (JWTs) issued before this moment are rejected — set when the
     // password changes so old/stolen sessions stop working.
@@ -68,6 +72,8 @@ userSchema.methods.toPublic = function ({ includeEmail = false } = {}) {
     mood: this.mood ?? "",
     listeningTo: this.listeningTo ?? "",
     tags: this.tags ?? [],
+    sectionOrder: completeOrder(this.sectionOrder),
+    hiddenSections: cleanHidden(this.hiddenSections),
     isPrivate: this.isPrivate,
     createdAt: this.createdAt,
     theme: this.theme || {},

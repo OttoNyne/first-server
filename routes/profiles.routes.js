@@ -12,6 +12,7 @@ import { createLimiter } from "../utils/rateLimit.js";
 import { deleteAccount } from "../services/accountDeletion.js";
 import { WALLPAPER_MOTIONS, isWallpaperMotion } from "../utils/wallpaperMotion.js";
 import { MAX_LISTENING, MAX_MOOD, checkLine, checkTags, isValidTag, normalizeTag } from "../utils/profileFields.js";
+import { checkHidden, checkOrder } from "../utils/profileSections.js";
 import { blockedUserIds } from "../utils/visibility.js";
 import { deleteStoredAssetIfUnused } from "../services/storedAssets.js";
 import { toPublicUser, toPublicTrack, toPublicComment } from "../utils/serialize.js";
@@ -65,7 +66,7 @@ profilesRouter.get("/tags", requireAuth, async (req, res) => {
 
 profilesRouter.patch("/me", requireAuth, async (req, res) => {
   const user = await User.findById(req.user.id);
-  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags } = req.body;
+  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections } = req.body;
   const fields = {};
   for (const [name, value, max, label] of [["mood", mood, MAX_MOOD, "Mood"], ["listeningTo", listeningTo, MAX_LISTENING, "Listening to"]]) {
     if (value === undefined) continue;
@@ -77,6 +78,12 @@ profilesRouter.patch("/me", requireAuth, async (req, res) => {
     const checked = checkTags(tags);
     if (checked.error) return res.status(400).json({ error: checked.error });
     fields.tags = checked.value;
+  }
+  for (const [name, value, check] of [["sectionOrder", sectionOrder, checkOrder], ["hiddenSections", hiddenSections, checkHidden]]) {
+    if (value === undefined) continue;
+    const checked = check(value);
+    if (checked.error) return res.status(400).json({ error: checked.error });
+    fields[name] = checked.value;
   }
   if (displayName !== undefined) {
     const parsedName = displayNameSchema.safeParse(displayName);
