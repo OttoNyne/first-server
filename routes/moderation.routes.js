@@ -41,7 +41,7 @@ moderationRouter.delete("/users/:username/block", async (req, res) => {
   res.status(204).end();
 });
 
-const REPORT_TARGET_TYPES = ["user", "post", "comment", "profileComment"];
+const REPORT_TARGET_TYPES = ["user", "post", "comment", "profileComment", "blogEntry"];
 
 moderationRouter.post("/reports", async (req, res) => {
   const { targetType, targetId, reason } = req.body;

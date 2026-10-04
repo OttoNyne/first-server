@@ -22,6 +22,7 @@ import { tasksRouter } from "./routes/tasks.routes.js";
 import { messagesRouter } from "./routes/messages.routes.js";
 import { liveRouter } from "./routes/live.routes.js";
 import { scheduledLivesRouter } from "./routes/scheduledLives.routes.js";
+import { blogRouter } from "./routes/blog.routes.js";
 import { securityRouter } from "./routes/security.routes.js";
 import { requireTrustedOrigin } from "./middleware/csrf.js";
 import { isAllowedOrigin } from "./utils/origins.js";
@@ -81,6 +82,7 @@ app.use("/api/tracks", tracksRouter);
 app.use("/api/tasks", tasksRouter);
 app.use("/api/messages", messagesRouter);
 app.use("/api/scheduled-lives", scheduledLivesRouter);
+app.use("/api/blog", blogRouter);
 app.use("/api/live", liveRouter);
 
 app.use(errorHandler);
