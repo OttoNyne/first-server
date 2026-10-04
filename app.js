@@ -27,6 +27,7 @@ import { bulletinsRouter } from "./routes/bulletins.routes.js";
 import { activityRouter } from "./routes/activity.routes.js";
 import { profileViewsRouter } from "./routes/profileViews.routes.js";
 import { albumsRouter } from "./routes/albums.routes.js";
+import { groupBoardRouter } from "./routes/groupBoard.routes.js";
 import { securityRouter } from "./routes/security.routes.js";
 import { requireTrustedOrigin } from "./middleware/csrf.js";
 import { isAllowedOrigin } from "./utils/origins.js";
@@ -78,6 +79,7 @@ app.use("/api", commentsRouter);
 app.use("/api/posts", postsRouter);
 app.use("/api/friends", friendsRouter);
 app.use("/api/groups", groupsRouter);
+app.use("/api/groups", groupBoardRouter);
 app.use("/api/media", mediaRouter);
 // albums can be looked at without signing in, so they go before moderationRouter, which asks for a sign-in on everything under /api
 app.use("/api/albums", albumsRouter);

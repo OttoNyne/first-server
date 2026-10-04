@@ -15,6 +15,8 @@ import { BlogEntry } from "../models/BlogEntry.js";
 import { Bulletin } from "../models/Bulletin.js";
 import { ProfileView } from "../models/ProfileView.js";
 import { Album } from "../models/Album.js";
+import { GroupTopic } from "../models/GroupTopic.js";
+import { GroupReply } from "../models/GroupReply.js";
 import { Block } from "../models/Block.js";
 import { Report } from "../models/Report.js";
 import { Task } from "../models/Task.js";
@@ -38,6 +40,8 @@ async function releaseGroups(userId) {
     if (!successor) {
       await GroupMembership.deleteMany({ group: group._id });
       await GroupMessage.deleteMany({ group: group._id });
+      await GroupReply.deleteMany({ group: group._id });
+      await GroupTopic.deleteMany({ group: group._id });
       await group.deleteOne();
       continue;
     }
@@ -85,6 +89,14 @@ export async function deleteAccount(userId) {
   // Messages they sent or received (the other person's copy is the same document).
   await Message.deleteMany({ $or: [{ sender: id }, { recipient: id }] });
   await GroupMessage.deleteMany({ sender: id });
+  // Their topics (with every reply in them) and their replies in other people's topics; reply counts are put right afterwards.
+  const topicIds = (await GroupTopic.find({ author: id }).select("_id")).map((t) => t._id);
+  const replyIds = (await GroupReply.find({ $or: [{ author: id }, { topic: { $in: topicIds } }] }).select("_id")).map((r) => r._id);
+  await GroupReply.deleteMany({ topic: { $in: topicIds } });
+  await GroupTopic.deleteMany({ author: id });
+  const touched = await GroupReply.distinct("topic", { author: id });
+  await GroupReply.deleteMany({ author: id });
+  for (const topic of touched) await GroupTopic.updateOne({ _id: topic }, { $set: { replyCount: await GroupReply.countDocuments({ topic }) } });
   await PasswordReset.deleteMany({ user: id });
   await EmailVerification.deleteMany({ user: id });
   // Voice lives: ones they hosted (with everything in them), and their part in others.
@@ -108,7 +120,7 @@ export async function deleteAccount(userId) {
   await Notification.deleteMany({ $or: [{ recipient: id }, { "payload.actorId": { $in: [String(id), id] } }] });
 
   // Their reports, and reports about them or their content.
-  const targetIds = [id, ...postIds, ...comments.map((c) => c._id), ...profileComments.map((c) => c._id), ...blogIds, ...bulletinIds];
+  const targetIds = [id, ...postIds, ...comments.map((c) => c._id), ...profileComments.map((c) => c._id), ...blogIds, ...bulletinIds, ...topicIds, ...replyIds];
   await Report.deleteMany({ $or: [{ reporter: id }, { targetId: { $in: targetIds } }] });
 
   const filesRemoved = await deleteAllStoredAssets(id);
