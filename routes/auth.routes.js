@@ -11,6 +11,7 @@ import { PasswordReset } from "../models/PasswordReset.js";
 import { sendMail, mailAvailable } from "../utils/mailer.js";
 import { primaryClientUrl } from "../utils/origins.js";
 import { sendVerificationEmail } from "../services/emailVerification.js";
+import { redeemInvite } from "../services/invites.js";
 import { createHash, randomBytes } from "node:crypto";
 
 export const authRouter = Router();
@@ -34,6 +35,8 @@ const registerSchema = z.object({
   username: usernameSchema,
   password: z.string().min(8).max(72),
   displayName: z.string().min(1).max(80),
+  // The code from an invite link, if they came in through one.
+  invite: z.string().max(64).optional(),
 });
 
 const loginSchema = z.object({
@@ -49,7 +52,7 @@ authRouter.post("/register", async (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.issues[0].message });
     }
-    const { email, username, password, displayName } = parsed.data;
+    const { email, username, password, displayName, invite } = parsed.data;
 
     const existing = await User.findOne({ $or: [{ email }, { username: username.toLowerCase() }] });
     if (existing || (await UsernameHistory.exists({ username: username.toLowerCase() }))) {
@@ -63,9 +66,19 @@ authRouter.post("/register", async (req, res) => {
     // Ask them to confirm the address. Sent after we've replied, and a failure never affects sign-up.
     sendVerificationEmail(user).catch((err) => console.error("Verification email failed:", err.message));
 
+    // Came in through an invite link: count it and make them friends. A problem here never stops the sign-up.
+    let invitedBy = null;
+    if (invite) {
+      try {
+        invitedBy = (await redeemInvite(invite, user))?.username ?? null;
+      } catch (err) {
+        console.error("Invite redemption failed:", err.message);
+      }
+    }
+
     const token = signAuthToken(user);
     setAuthCookie(res, token);
-    res.status(201).json({ user: await toPublicUser(user, user._id) });
+    res.status(201).json({ user: await toPublicUser(user, user._id), ...(invitedBy ? { invitedBy } : {}) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });

@@ -17,6 +17,7 @@ import { ProfileView } from "../models/ProfileView.js";
 import { Album } from "../models/Album.js";
 import { GroupTopic } from "../models/GroupTopic.js";
 import { GroupReply } from "../models/GroupReply.js";
+import { Invite } from "../models/Invite.js";
 import { Block } from "../models/Block.js";
 import { Report } from "../models/Report.js";
 import { Task } from "../models/Task.js";
@@ -84,6 +85,9 @@ export async function deleteAccount(userId) {
   await MediaReaction.deleteMany({ $or: [{ user: id }, { item: { $in: mediaIds } }] });
   await MediaItem.deleteMany({ owner: id });
   await Album.deleteMany({ owner: id });
+  // Invite links they made, and their name on other people's lists of who came in through a link.
+  await Invite.deleteMany({ inviter: id });
+  await Invite.updateMany({ "joined.user": id }, { $pull: { joined: { user: id } } });
   await Track.deleteMany({ owner: id });
   await Task.deleteMany({ owner: id });
   // Messages they sent or received (the other person's copy is the same document).
