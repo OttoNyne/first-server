@@ -13,6 +13,7 @@ import { Notification } from "../models/Notification.js";
 import { ScheduledLive } from "../models/ScheduledLive.js";
 import { BlogEntry } from "../models/BlogEntry.js";
 import { Bulletin } from "../models/Bulletin.js";
+import { ProfileView } from "../models/ProfileView.js";
 import { Block } from "../models/Block.js";
 import { Report } from "../models/Report.js";
 import { Task } from "../models/Task.js";
@@ -67,6 +68,7 @@ export async function deleteAccount(userId) {
   await BlogEntry.deleteMany({ author: id });
   const bulletinIds = (await Bulletin.find({ author: id }).select("_id")).map((b) => b._id);
   await Bulletin.deleteMany({ author: id });
+  await ProfileView.deleteMany({ $or: [{ owner: id }, { viewer: id }] });
 
   await Friendship.deleteMany({ $or: [{ requester: id }, { addressee: id }] });
   await TopFriend.deleteMany({ $or: [{ owner: id }, { target: id }] });

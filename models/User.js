@@ -29,6 +29,8 @@ const userSchema = new mongoose.Schema(
     // "Online now" / "active today": when their page last checked in, and whether their friends may see it (see utils/activity.js).
     lastActiveAt: { type: Date, default: null },
     showActivity: { type: Boolean, default: true },
+    // Opt-in profile views (default off): they may see who visits their profile, and visitors they look at may see them (see routes/profileViews.routes.js).
+    profileViews: { type: Boolean, default: false },
     // Sessions (JWTs) issued before this moment are rejected — set when the
     // password changes so old/stolen sessions stop working.
     passwordChangedAt: { type: Date, default: null },
@@ -65,7 +67,7 @@ userSchema.methods.comparePassword = function (candidate) {
 userSchema.methods.toPublic = function ({ includeEmail = false } = {}) {
   return {
     id: this._id,
-    ...(includeEmail ? { email: this.email, emailVerified: this.emailVerified, showActivity: this.showActivity !== false } : {}),
+    ...(includeEmail ? { email: this.email, emailVerified: this.emailVerified, showActivity: this.showActivity !== false, profileViews: this.profileViews === true } : {}),
     username: this.username,
     displayName: this.displayName,
     bio: this.bio,

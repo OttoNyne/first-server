@@ -15,6 +15,7 @@ import { MAX_LISTENING, MAX_MOOD, checkLine, checkTags, isValidTag, normalizeTag
 import { checkHidden, checkOrder } from "../utils/profileSections.js";
 import { areFriends, blockedUserIds, getProfileForViewer } from "../utils/visibility.js";
 import { activityFor } from "../utils/activity.js";
+import { ProfileView } from "../models/ProfileView.js";
 import { deleteStoredAssetIfUnused } from "../services/storedAssets.js";
 import { toPublicUser, toPublicTrack, toPublicComment } from "../utils/serialize.js";
 import { escapeRegex } from "../utils/regex.js";
@@ -66,7 +67,7 @@ profilesRouter.get("/tags", requireAuth, async (req, res) => {
 
 profilesRouter.patch("/me", requireAuth, async (req, res) => {
   const user = await User.findById(req.user.id);
-  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections, showActivity } = req.body;
+  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections, showActivity, profileViews } = req.body;
   const fields = {};
   for (const [name, value, max, label] of [["mood", mood, MAX_MOOD, "Mood"], ["listeningTo", listeningTo, MAX_LISTENING, "Listening to"]]) {
     if (value === undefined) continue;
@@ -90,6 +91,10 @@ profilesRouter.patch("/me", requireAuth, async (req, res) => {
     fields.showActivity = showActivity;
     // turning it off also forgets when they were last active
     if (!showActivity) fields.lastActiveAt = null;
+  }
+  if (profileViews !== undefined) {
+    if (typeof profileViews !== "boolean") return res.status(400).json({ error: "profileViews must be true or false" });
+    fields.profileViews = profileViews;
   }
   if (displayName !== undefined) {
     const parsedName = displayNameSchema.safeParse(displayName);
@@ -122,6 +127,8 @@ profilesRouter.patch("/me", requireAuth, async (req, res) => {
   if (theme !== undefined) user.theme = { ...(user.theme?.toObject?.() ?? user.theme ?? {}), ...theme };
 
   await user.save();
+  // turning profile views off forgets every visit: the ones to your profile and the ones you made to other people's
+  if (fields.profileViews === false) await ProfileView.deleteMany({ $or: [{ owner: user._id }, { viewer: user._id }] });
   // A replaced avatar/wallpaper we stored (an upload or an AI image) would
   // otherwise stay on Cloudinary forever.
   for (const oldUrl of replaced) await deleteStoredAssetIfUnused({ ownerId: user._id, url: oldUrl });
