@@ -15,6 +15,10 @@ const userSchema = new mongoose.Schema(
     wallpaperPosition: { type: String, default: "50% 50%" },
     // How a picture wallpaper moves (see utils/wallpaperMotion.js).
     wallpaperMotion: { type: String, enum: WALLPAPER_MOTIONS, default: "none" },
+    // A short status line, what they are listening to, and what they do (up to 8 lowercase tags, used to browse for people).
+    mood: { type: String, default: "", maxlength: 60 },
+    listeningTo: { type: String, default: "", maxlength: 80 },
+    tags: { type: [String], default: [] },
     isPrivate: { type: Boolean, default: false },
     // Sessions (JWTs) issued before this moment are rejected — set when the
     // password changes so old/stolen sessions stop working.
@@ -61,6 +65,9 @@ userSchema.methods.toPublic = function ({ includeEmail = false } = {}) {
     wallpaperType: this.wallpaperType,
     wallpaperPosition: this.wallpaperPosition,
     wallpaperMotion: this.wallpaperMotion ?? "none",
+    mood: this.mood ?? "",
+    listeningTo: this.listeningTo ?? "",
+    tags: this.tags ?? [],
     isPrivate: this.isPrivate,
     createdAt: this.createdAt,
     theme: this.theme || {},
@@ -80,5 +87,7 @@ userSchema.methods.toPublicRestricted = function () {
     createdAt: this.createdAt,
   };
 };
+
+userSchema.index({ tags: 1 });
 
 export const User = mongoose.model("User", userSchema);

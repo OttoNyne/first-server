@@ -10,6 +10,7 @@ import { GroupMembership } from "../models/GroupMembership.js";
 import { MediaItem } from "../models/MediaItem.js";
 import { Track } from "../models/Track.js";
 import { Notification } from "../models/Notification.js";
+import { ScheduledLive } from "../models/ScheduledLive.js";
 import { Block } from "../models/Block.js";
 import { Report } from "../models/Report.js";
 import { Task } from "../models/Task.js";
@@ -87,6 +88,9 @@ export async function deleteAccount(userId) {
     LiveComment.deleteMany({ $or: [{ session: { $in: hosted } }, { user: id }] }),
   ]);
   await LiveSession.deleteMany({ host: id });
+  // Lives they planned (and the announcements of them), and their requests to be reminded of other people's.
+  await ScheduledLive.deleteMany({ host: id });
+  await ScheduledLive.updateMany({ reminders: id }, { $pull: { reminders: id } });
   await UsernameHistory.deleteMany({ user: id });
 
   // Notifications addressed to them, and ones they caused (actorId was stored

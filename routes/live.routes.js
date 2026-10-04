@@ -9,6 +9,8 @@ import { assertVisible, blockedUserIds } from "../utils/visibility.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { createTtlCache } from "../utils/ttlCache.js";
+import { ScheduledLive } from "../models/ScheduledLive.js";
+import { removePlanNotifications } from "../services/scheduledLives.js";
 import { requireVerifiedEmail } from "../middleware/requireVerifiedEmail.js";
 import {
   MAX_STAGE_GUESTS,
@@ -87,6 +89,25 @@ async function endStaleSessions() {
     LiveSignal.deleteMany({ session: { $in: ids } }),
     removeLiveNotifications(ids),
   ]);
+}
+
+// A live that was planned has now begun: close the plan, and tell the people who asked to be reminded that it is on (friends
+// already heard from notifyFriendsOfLive). A bad or someone else's plan id is simply ignored; it never stops the live.
+async function closePlan(scheduledId, session, hostId) {
+  try {
+    if (typeof scheduledId !== "string" || !validId(scheduledId)) return;
+    const plan = await ScheduledLive.findOneAndUpdate({ _id: scheduledId, host: hostId, status: "scheduled" }, { $set: { status: "started", liveId: session._id } });
+    if (!plan) return;
+    await removePlanNotifications(plan._id);
+    const friendships = await Friendship.find({ status: "accepted", $or: [{ requester: hostId }, { addressee: hostId }] });
+    const alreadyTold = new Set(friendships.map((f) => (String(f.requester) === String(hostId) ? String(f.addressee) : String(f.requester))));
+    const blocked = await blockedUserIds(hostId);
+    const rest = plan.reminders.map(String).filter((id) => !alreadyTold.has(id) && !blocked.has(id));
+    if (!rest.length) return;
+    await Notification.insertMany(rest.map((recipient) => ({ recipient, type: "live_started", payload: { actorId: String(hostId), liveId: String(session._id), title: session.title } })));
+  } catch (err) {
+    console.error("Couldn't close a scheduled live:", err.message);
+  }
 }
 
 // "X is live" notifications are only useful while the live is on, so they go when it ends.
@@ -291,6 +312,7 @@ liveRouter.post("/", requireVerifiedEmail, async (req, res) => {
   }
   const host = await User.findById(req.user.id);
   await notifyFriendsOfLive(session, req.user.id);
+  await closePlan(req.body?.scheduledId, session, req.user.id);
   res.status(201).json({ live: await serializeSession(session, host, req.user.id) });
 });
 

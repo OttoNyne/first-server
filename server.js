@@ -13,10 +13,12 @@ await connectDB();
 
 const { app } = await import("./app.js");
 const { describeMail } = await import("./utils/mailer.js");
+const { startReminderTimer } = await import("./services/scheduledLives.js");
 
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
   console.log(describeMail());
+  startReminderTimer(); // "your live starts soon" reminders
 });

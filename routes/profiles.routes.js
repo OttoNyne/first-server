@@ -11,6 +11,8 @@ import { usernameSchema, displayNameSchema } from "../utils/username.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { deleteAccount } from "../services/accountDeletion.js";
 import { WALLPAPER_MOTIONS, isWallpaperMotion } from "../utils/wallpaperMotion.js";
+import { MAX_LISTENING, MAX_MOOD, checkLine, checkTags, isValidTag, normalizeTag } from "../utils/profileFields.js";
+import { blockedUserIds } from "../utils/visibility.js";
 import { deleteStoredAssetIfUnused } from "../services/storedAssets.js";
 import { toPublicUser, toPublicTrack, toPublicComment } from "../utils/serialize.js";
 import { getProfileForViewer } from "../utils/visibility.js";
@@ -28,9 +30,54 @@ profilesRouter.get("/", requireAuth, async (req, res) => {
   res.json({ users: await Promise.all(users.map((u) => toPublicUser(u, req.user.id))) });
 });
 
+// ---- Discover: browse creatives by what they do ---------------------------------------------------------------------
+const DISCOVER_PAGE = 20;
+const MAX_DISCOVER_PAGE = 50;
+
+// New creatives, newest first, optionally only those with a tag. Private profiles are never listed (their tags are as
+// private as the rest of them), and nobody who has blocked you, or whom you have blocked, appears.
+profilesRouter.get("/discover", requireAuth, async (req, res) => {
+  const filter = { isPrivate: { $ne: true }, _id: { $nin: [...(await blockedUserIds(req.user.id)), req.user.id] } };
+  if (req.query.tag !== undefined) {
+    const tag = normalizeTag(typeof req.query.tag === "string" ? req.query.tag : "");
+    if (!isValidTag(tag)) return res.status(400).json({ error: "That isn't a valid tag" });
+    filter.tags = tag;
+  }
+  const page = Math.min(MAX_DISCOVER_PAGE, Math.max(1, Number.parseInt(req.query.page, 10) || 1));
+  const found = await User.find(filter)
+    .sort({ createdAt: -1, _id: -1 })
+    .skip((page - 1) * DISCOVER_PAGE)
+    .limit(DISCOVER_PAGE + 1);
+  const users = found.slice(0, DISCOVER_PAGE);
+  res.json({ users: await Promise.all(users.map((u) => toPublicUser(u, req.user.id))), page, hasMore: found.length > DISCOVER_PAGE && page < MAX_DISCOVER_PAGE });
+});
+
+// The tags people use, most used first (public profiles only); `q` narrows them to those starting with it, for suggestions.
+profilesRouter.get("/tags", requireAuth, async (req, res) => {
+  const q = typeof req.query.q === "string" ? normalizeTag(req.query.q) : "";
+  const match = { isPrivate: { $ne: true }, "tags.0": { $exists: true } };
+  const pipeline = [{ $match: match }, { $unwind: "$tags" }];
+  if (q) pipeline.push({ $match: { tags: { $regex: `^${escapeRegex(q)}` } } });
+  pipeline.push({ $group: { _id: "$tags", count: { $sum: 1 } } }, { $sort: { count: -1, _id: 1 } }, { $limit: 24 });
+  const rows = await User.aggregate(pipeline);
+  res.json({ tags: rows.map((r) => ({ tag: r._id, count: r.count })) });
+});
+
 profilesRouter.patch("/me", requireAuth, async (req, res) => {
   const user = await User.findById(req.user.id);
-  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme } = req.body;
+  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags } = req.body;
+  const fields = {};
+  for (const [name, value, max, label] of [["mood", mood, MAX_MOOD, "Mood"], ["listeningTo", listeningTo, MAX_LISTENING, "Listening to"]]) {
+    if (value === undefined) continue;
+    const checked = checkLine(value, max, label);
+    if (checked.error) return res.status(400).json({ error: checked.error });
+    fields[name] = checked.value;
+  }
+  if (tags !== undefined) {
+    const checked = checkTags(tags);
+    if (checked.error) return res.status(400).json({ error: checked.error });
+    fields.tags = checked.value;
+  }
   if (displayName !== undefined) {
     const parsedName = displayNameSchema.safeParse(displayName);
     if (!parsedName.success) return res.status(400).json({ error: parsedName.error.issues[0].message });
@@ -57,6 +104,7 @@ profilesRouter.patch("/me", requireAuth, async (req, res) => {
   if (wallpaperType !== undefined) user.wallpaperType = wallpaperType;
   if (wallpaperPosition !== undefined) user.wallpaperPosition = wallpaperPosition;
   if (wallpaperMotion !== undefined) user.wallpaperMotion = wallpaperMotion;
+  Object.assign(user, fields);
   if (isPrivate !== undefined) user.isPrivate = isPrivate;
   if (theme !== undefined) user.theme = { ...(user.theme?.toObject?.() ?? user.theme ?? {}), ...theme };
 

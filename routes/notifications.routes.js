@@ -4,11 +4,14 @@ import { Friendship } from "../models/Friendship.js";
 import { User } from "../models/User.js";
 import { requireAuth } from "../middleware/auth.js";
 import { toPublicUser } from "../utils/serialize.js";
+import { processDueReminders } from "../services/scheduledLives.js";
 
 export const notificationsRouter = Router();
 notificationsRouter.use(requireAuth);
 
 notificationsRouter.get("/", async (req, res) => {
+  // a server that slept through a start time catches up the moment anyone looks
+  await processDueReminders().catch((err) => console.error("Reminder check failed:", err.message));
   const notifications = await Notification.find({ recipient: req.user.id })
     .sort("-createdAt -_id")
     .limit(50);
