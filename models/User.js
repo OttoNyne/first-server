@@ -26,6 +26,9 @@ const userSchema = new mongoose.Schema(
     isPrivate: { type: Boolean, default: false },
     // When they last looked at the bulletin board (bulletins after this are "new").
     bulletinsSeenAt: { type: Date, default: null },
+    // "Online now" / "active today": when their page last checked in, and whether their friends may see it (see utils/activity.js).
+    lastActiveAt: { type: Date, default: null },
+    showActivity: { type: Boolean, default: true },
     // Sessions (JWTs) issued before this moment are rejected — set when the
     // password changes so old/stolen sessions stop working.
     passwordChangedAt: { type: Date, default: null },
@@ -62,7 +65,7 @@ userSchema.methods.comparePassword = function (candidate) {
 userSchema.methods.toPublic = function ({ includeEmail = false } = {}) {
   return {
     id: this._id,
-    ...(includeEmail ? { email: this.email, emailVerified: this.emailVerified } : {}),
+    ...(includeEmail ? { email: this.email, emailVerified: this.emailVerified, showActivity: this.showActivity !== false } : {}),
     username: this.username,
     displayName: this.displayName,
     bio: this.bio,

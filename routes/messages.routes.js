@@ -6,6 +6,7 @@ import { Friendship } from "../models/Friendship.js";
 import { requireAuth } from "../middleware/auth.js";
 import { areBlocked, areFriends } from "../utils/visibility.js";
 import { toPublicUser } from "../utils/serialize.js";
+import { activityFor } from "../utils/activity.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { Notification } from "../models/Notification.js";
 
@@ -104,7 +105,7 @@ messagesRouter.get("/conversations", async (req, res) => {
     users.map(async (u) => {
       const last = lastByPair.get(pairKey(req.user.id, u._id));
       return {
-        user: await toPublicUser(u, req.user.id),
+        user: { ...(await toPublicUser(u, req.user.id)), ...activityFor(u, req.user.id, true) },
         lastMessage: last ? toPublicMessage(last, req.user.id) : null,
         unread: unreadBySender.get(String(u._id)) ?? 0,
       };
@@ -138,7 +139,7 @@ messagesRouter.get("/with/:username", async (req, res) => {
   await Notification.updateMany({ recipient: req.user.id, type: "message", "payload.actorId": String(other._id) }, { $set: { isRead: true } });
 
   res.json({
-    user: await toPublicUser(other, req.user.id),
+    user: { ...(await toPublicUser(other, req.user.id)), ...activityFor(other, req.user.id, true) },
     messages: page.map((m) => toPublicMessage(m, req.user.id)),
     hasMore,
   });

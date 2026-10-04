@@ -13,10 +13,10 @@ import { deleteAccount } from "../services/accountDeletion.js";
 import { WALLPAPER_MOTIONS, isWallpaperMotion } from "../utils/wallpaperMotion.js";
 import { MAX_LISTENING, MAX_MOOD, checkLine, checkTags, isValidTag, normalizeTag } from "../utils/profileFields.js";
 import { checkHidden, checkOrder } from "../utils/profileSections.js";
-import { blockedUserIds } from "../utils/visibility.js";
+import { areFriends, blockedUserIds, getProfileForViewer } from "../utils/visibility.js";
+import { activityFor } from "../utils/activity.js";
 import { deleteStoredAssetIfUnused } from "../services/storedAssets.js";
 import { toPublicUser, toPublicTrack, toPublicComment } from "../utils/serialize.js";
-import { getProfileForViewer } from "../utils/visibility.js";
 import { escapeRegex } from "../utils/regex.js";
 
 export const profilesRouter = Router();
@@ -66,7 +66,7 @@ profilesRouter.get("/tags", requireAuth, async (req, res) => {
 
 profilesRouter.patch("/me", requireAuth, async (req, res) => {
   const user = await User.findById(req.user.id);
-  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections } = req.body;
+  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections, showActivity } = req.body;
   const fields = {};
   for (const [name, value, max, label] of [["mood", mood, MAX_MOOD, "Mood"], ["listeningTo", listeningTo, MAX_LISTENING, "Listening to"]]) {
     if (value === undefined) continue;
@@ -84,6 +84,12 @@ profilesRouter.patch("/me", requireAuth, async (req, res) => {
     const checked = check(value);
     if (checked.error) return res.status(400).json({ error: checked.error });
     fields[name] = checked.value;
+  }
+  if (showActivity !== undefined) {
+    if (typeof showActivity !== "boolean") return res.status(400).json({ error: "showActivity must be true or false" });
+    fields.showActivity = showActivity;
+    // turning it off also forgets when they were last active
+    if (!showActivity) fields.lastActiveAt = null;
   }
   if (displayName !== undefined) {
     const parsedName = displayNameSchema.safeParse(displayName);
@@ -238,7 +244,8 @@ profilesRouter.delete("/comments/:commentId", requireAuth, async (req, res) => {
 profilesRouter.get("/:username", attachUserIfPresent, async (req, res) => {
   try {
     const user = await getProfileForViewer(req.params.username, req.user?.id);
-    res.json({ user: await toPublicUser(user, req.user?.id) });
+    const isFriend = req.user ? await areFriends(req.user.id, user._id) : false;
+    res.json({ user: { ...(await toPublicUser(user, req.user?.id)), ...activityFor(user, req.user?.id, isFriend) } });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }

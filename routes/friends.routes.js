@@ -5,6 +5,7 @@ import { User } from "../models/User.js";
 import { Notification } from "../models/Notification.js";
 import { requireAuth } from "../middleware/auth.js";
 import { toPublicUser } from "../utils/serialize.js";
+import { activityFor } from "../utils/activity.js";
 
 export const friendsRouter = Router();
 friendsRouter.use(requireAuth);
@@ -20,7 +21,7 @@ friendsRouter.get("/", async (req, res) => {
   const friends = friendships.map((f) =>
     String(f.requester._id) === req.user.id ? f.addressee : f.requester
   );
-  res.json({ friends: await Promise.all(friends.map((f) => toPublicUser(f, req.user.id))) });
+  res.json({ friends: await Promise.all(friends.map(async (f) => ({ ...(await toPublicUser(f, req.user.id)), ...activityFor(f, req.user.id, true) }))) });
 });
 
 friendsRouter.get("/requests", async (req, res) => {
