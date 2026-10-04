@@ -26,6 +26,8 @@ const userSchema = new mongoose.Schema(
     isPrivate: { type: Boolean, default: false },
     // When they last looked at the bulletin board (bulletins after this are "new").
     bulletinsSeenAt: { type: Date, default: null },
+    // When they hid the getting-started checklist (see routes/onboarding.routes.js).
+    onboardingDismissedAt: { type: Date, default: null },
     // "Online now" / "active today": when their page last checked in, and whether their friends may see it (see utils/activity.js).
     lastActiveAt: { type: Date, default: null },
     showActivity: { type: Boolean, default: true },

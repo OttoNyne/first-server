@@ -29,6 +29,7 @@ import { profileViewsRouter } from "./routes/profileViews.routes.js";
 import { albumsRouter } from "./routes/albums.routes.js";
 import { groupBoardRouter } from "./routes/groupBoard.routes.js";
 import { invitesRouter } from "./routes/invites.routes.js";
+import { onboardingRouter } from "./routes/onboarding.routes.js";
 import { securityRouter } from "./routes/security.routes.js";
 import { requireTrustedOrigin } from "./middleware/csrf.js";
 import { isAllowedOrigin } from "./utils/origins.js";
@@ -97,6 +98,7 @@ app.use("/api/blog", blogRouter);
 app.use("/api/bulletins", bulletinsRouter);
 app.use("/api/activity", activityRouter);
 app.use("/api/profile-views", profileViewsRouter);
+app.use("/api/onboarding", onboardingRouter);
 app.use("/api/live", liveRouter);
 
 app.use(errorHandler);
