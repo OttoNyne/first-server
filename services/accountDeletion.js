@@ -12,6 +12,7 @@ import { Track } from "../models/Track.js";
 import { Notification } from "../models/Notification.js";
 import { ScheduledLive } from "../models/ScheduledLive.js";
 import { BlogEntry } from "../models/BlogEntry.js";
+import { Bulletin } from "../models/Bulletin.js";
 import { Block } from "../models/Block.js";
 import { Report } from "../models/Report.js";
 import { Task } from "../models/Task.js";
@@ -64,6 +65,8 @@ export async function deleteAccount(userId) {
   await Post.deleteMany({ author: id });
   const blogIds = (await BlogEntry.find({ author: id }).select("_id")).map((e) => e._id);
   await BlogEntry.deleteMany({ author: id });
+  const bulletinIds = (await Bulletin.find({ author: id }).select("_id")).map((b) => b._id);
+  await Bulletin.deleteMany({ author: id });
 
   await Friendship.deleteMany({ $or: [{ requester: id }, { addressee: id }] });
   await TopFriend.deleteMany({ $or: [{ owner: id }, { target: id }] });
@@ -101,7 +104,7 @@ export async function deleteAccount(userId) {
   await Notification.deleteMany({ $or: [{ recipient: id }, { "payload.actorId": { $in: [String(id), id] } }] });
 
   // Their reports, and reports about them or their content.
-  const targetIds = [id, ...postIds, ...comments.map((c) => c._id), ...profileComments.map((c) => c._id), ...blogIds];
+  const targetIds = [id, ...postIds, ...comments.map((c) => c._id), ...profileComments.map((c) => c._id), ...blogIds, ...bulletinIds];
   await Report.deleteMany({ $or: [{ reporter: id }, { targetId: { $in: targetIds } }] });
 
   const filesRemoved = await deleteAllStoredAssets(id);

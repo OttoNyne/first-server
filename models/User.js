@@ -24,6 +24,8 @@ const userSchema = new mongoose.Schema(
     sectionOrder: { type: [String], default: [] },
     hiddenSections: { type: [String], default: [] },
     isPrivate: { type: Boolean, default: false },
+    // When they last looked at the bulletin board (bulletins after this are "new").
+    bulletinsSeenAt: { type: Date, default: null },
     // Sessions (JWTs) issued before this moment are rejected — set when the
     // password changes so old/stolen sessions stop working.
     passwordChangedAt: { type: Date, default: null },
