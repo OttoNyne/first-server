@@ -11,6 +11,8 @@ const messageSchema = new mongoose.Schema(
     pair: { type: String, required: true },
     body: { type: String, required: true, maxlength: MAX_MESSAGE_LENGTH },
     readAt: { type: Date, default: null },
+    // When the author last changed what they wrote (null if never).
+    editedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

@@ -7,6 +7,10 @@ import { requireAuth } from "../middleware/auth.js";
 import { areBlocked, areFriends } from "../utils/visibility.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { activityFor } from "../utils/activity.js";
+import { allowEdit } from "../utils/textInput.js";
+import { cleanBody } from "../utils/blogText.js";
+
+export const EDIT_WINDOW_MS = 15 * 60 * 1000;
 import { createLimiter } from "../utils/rateLimit.js";
 import { Notification } from "../models/Notification.js";
 
@@ -30,6 +34,7 @@ const toPublicMessage = (m, viewerId) => ({
   body: m.body,
   readAt: m.readAt,
   createdAt: m.createdAt,
+  editedAt: m.editedAt ?? null,
 });
 
 // Tells the recipient they have a new message. One notification per sender while it is unread: another message
@@ -167,6 +172,25 @@ messagesRouter.post("/with/:username", async (req, res) => {
   });
   await notifyOfMessage(req.user.id, other._id);
   res.status(201).json({ message: toPublicMessage(message, req.user.id) });
+});
+
+// Fix a typo in a message you sent, for fifteen minutes after sending it (after that a message can only be deleted, so what the
+// other person has read doesn't quietly change). Both people see it marked as edited.
+messagesRouter.patch("/:id", async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: "Message not found" });
+  const message = await Message.findById(req.params.id);
+  if (!message || String(message.sender) !== req.user.id) return res.status(404).json({ error: "Message not found" });
+  if (Date.now() - message.createdAt.getTime() > EDIT_WINDOW_MS) return res.status(403).json({ error: "Messages can only be changed for 15 minutes after they are sent", code: "edit_window_over" });
+  const body = typeof req.body?.body === "string" ? cleanBody(req.body.body) : "";
+  if (!body) return res.status(400).json({ error: "Write something to send" });
+  if (body.length > MAX_MESSAGE_LENGTH) return res.status(400).json({ error: `Messages can be up to ${MAX_MESSAGE_LENGTH} characters` });
+  if (!(await allowEdit(req, res))) return;
+  if (body !== message.body) {
+    message.body = body;
+    message.editedAt = new Date();
+    await message.save();
+  }
+  res.json({ message: toPublicMessage(message, req.user.id) });
 });
 
 // Only the sender can delete a message, and it disappears for both people.

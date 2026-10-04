@@ -25,6 +25,7 @@ async function withMemberInfo(groups, viewerId) {
     user: viewerId,
   });
   const memberSet = new Set(memberships.map((m) => String(m.group)));
+  const roleOf = new Map(memberships.map((m) => [String(m.group), m.role]));
 
   return groups.map((g) => ({
     id: g._id,
@@ -35,13 +36,16 @@ async function withMemberInfo(groups, viewerId) {
     createdAt: g.createdAt,
     memberCount: countMap.get(String(g._id)) || 0,
     isMember: memberSet.has(String(g._id)),
+    myRole: roleOf.get(String(g._id)) ?? null,
   }));
 }
 
 groupsRouter.get("/", async (req, res) => {
   const filter = req.query.search ? { name: { $regex: escapeRegex(req.query.search), $options: "i" } } : {};
-  const groups = await Group.find(filter).sort("-createdAt");
-  res.json({ groups: await withMemberInfo(groups, req.user.id) });
+  // Newest first, twenty a page.
+  const page = Math.min(100, Math.max(1, Number.parseInt(req.query.page, 10) || 1));
+  const found = await Group.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * 20).limit(21);
+  res.json({ groups: await withMemberInfo(found.slice(0, 20), req.user.id), page, hasMore: found.length > 20 });
 });
 
 groupsRouter.post("/", async (req, res) => {
@@ -78,8 +82,13 @@ groupsRouter.post("/:id/leave", async (req, res) => {
 });
 
 groupsRouter.get("/:id/members", async (req, res) => {
-  const members = await GroupMembership.find({ group: req.params.id }).populate("user");
+  // Oldest members first, fifty a page.
+  const page = Math.min(1000, Math.max(1, Number.parseInt(req.query.page, 10) || 1));
+  const found = await GroupMembership.find({ group: req.params.id }).sort({ joinedAt: 1, _id: 1 }).skip((page - 1) * 50).limit(51).populate("user");
+  const members = found.slice(0, 50);
   res.json({
+    page,
+    hasMore: found.length > 50,
     members: await Promise.all(
       members.map(async (m) => ({
         role: m.role,

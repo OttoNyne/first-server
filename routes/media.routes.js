@@ -15,6 +15,9 @@ import { MAX_VIDEO_SECONDS, parseStartSeconds, parseVideoLink } from "../utils/v
 
 export const mediaRouter = Router();
 
+// One person's portfolio holds at most this many pieces, so it can always be listed in one go.
+export const MAX_PORTFOLIO = 200;
+
 // Cloudinary reports the duration of a video it has just ingested; allow a
 // little rounding slack over the 30-second limit.
 const DURATION_SLACK_SECONDS = 0.75;
@@ -25,6 +28,12 @@ mediaRouter.post("/upload", requireAuth, upload.single("file"), async (req, res)
   const url = req.file.path;
   const isVideo = req.file.mimetype.startsWith("video/");
   const isPortfolio = purpose === "portfolio" || !["avatars", "wallpapers", "tracks"].includes(purpose);
+
+  // A full portfolio can't take another piece; the file was already stored, so take it out again.
+  if (isPortfolio && (await MediaItem.countDocuments({ owner: req.user.id })) >= MAX_PORTFOLIO) {
+    await cloudinary.uploader.destroy(req.file.filename, { resource_type: isVideo ? "video" : "image", invalidate: true }).catch(() => {});
+    return res.status(400).json({ error: `Your portfolio is full (${MAX_PORTFOLIO} pieces) — remove one to add another` });
+  }
 
   // Portfolio videos are limited to 30 seconds. The duration is only known
   // once the storage provider has the file, so check it now and remove the
@@ -79,6 +88,10 @@ mediaRouter.post("/", requireAuth, async (req, res) => {
   const { url, type = "image", caption, isAiImage } = req.body ?? {};
   if (caption !== undefined && caption !== null && (typeof caption !== "string" || caption.length > 200)) {
     return badRequest(res, "Caption must be text of 200 characters or fewer");
+  }
+
+  if ((await MediaItem.countDocuments({ owner: req.user.id })) >= MAX_PORTFOLIO) {
+    return badRequest(res, `Your portfolio is full (${MAX_PORTFOLIO} pieces) — remove one to add another`);
   }
 
   let item;

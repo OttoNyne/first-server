@@ -11,6 +11,7 @@ import { toPublicUser } from "../utils/serialize.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { cleanLine } from "../utils/profileFields.js";
 import { cleanBody } from "../utils/blogText.js";
+import { allowEdit } from "../utils/textInput.js";
 
 // A group's board: lasting topics with replies, for the group's members only (reading and writing both need membership, so leaving a
 // group ends access). Authors and group admins can remove things; admins can pin a few topics. People you've blocked, or who blocked
@@ -56,6 +57,7 @@ const topicShape = (t, authors, viewerId) => ({
   pinned: t.pinned,
   replyCount: t.replyCount,
   createdAt: t.createdAt,
+  editedAt: t.editedAt ?? null,
   lastActivityAt: t.lastActivityAt,
   mine: String(t.author) === String(viewerId),
   author: authors.get(String(t.author)) ?? null,
@@ -65,6 +67,7 @@ const replyShape = (r, authors, viewerId) => ({
   topicId: r.topic,
   body: r.body,
   createdAt: r.createdAt,
+  editedAt: r.editedAt ?? null,
   mine: String(r.author) === String(viewerId),
   author: authors.get(String(r.author)) ?? null,
 });
@@ -141,6 +144,43 @@ groupBoardRouter.post("/:id/topics/:topicId/replies", async (req, res) => {
   await GroupTopic.updateOne({ _id: topic._id }, { $inc: { replyCount: 1 }, $set: { lastActivityAt: reply.createdAt } });
   const authors = await publicAuthors([reply], req.user.id);
   res.status(201).json({ reply: replyShape(reply, authors, req.user.id) });
+});
+
+// The author (and only the author) can change a topic or a reply; group admins moderate by removing. Marked as edited.
+groupBoardRouter.patch("/:id/topics/:topicId", async (req, res) => {
+  if (!(await requireMember(req, res))) return;
+  if (!validId(req.params.topicId)) return res.status(404).json({ error: "Topic not found" });
+  const topic = await GroupTopic.findOne({ _id: req.params.topicId, group: req.params.id, author: req.user.id });
+  if (!topic) return res.status(404).json({ error: "Topic not found" });
+  const checked = checkTopic({ title: req.body?.title ?? topic.title, body: req.body?.body ?? topic.body });
+  if (checked.error) return res.status(400).json({ error: checked.error });
+  if (!(await allowEdit(req, res))) return;
+  if (checked.title !== topic.title || checked.body !== topic.body) {
+    topic.title = checked.title;
+    topic.body = checked.body;
+    topic.editedAt = new Date();
+    await topic.save();
+  }
+  const authors = await publicAuthors([topic], req.user.id);
+  res.json({ topic: topicShape(topic, authors, req.user.id) });
+});
+
+groupBoardRouter.patch("/:id/topics/:topicId/replies/:replyId", async (req, res) => {
+  if (!(await requireMember(req, res))) return;
+  if (!validId(req.params.topicId) || !validId(req.params.replyId)) return res.status(404).json({ error: "Reply not found" });
+  const reply = await GroupReply.findOne({ _id: req.params.replyId, topic: req.params.topicId, group: req.params.id, author: req.user.id });
+  if (!reply) return res.status(404).json({ error: "Reply not found" });
+  const body = typeof req.body?.body === "string" ? cleanBody(req.body.body) : "";
+  if (!body) return res.status(400).json({ error: "Write something to reply" });
+  if (body.length > MAX_REPLY_BODY) return res.status(400).json({ error: `Replies can be up to ${MAX_REPLY_BODY} characters` });
+  if (!(await allowEdit(req, res))) return;
+  if (body !== reply.body) {
+    reply.body = body;
+    reply.editedAt = new Date();
+    await reply.save();
+  }
+  const authors = await publicAuthors([reply], req.user.id);
+  res.json({ reply: replyShape(reply, authors, req.user.id) });
 });
 
 // The author of a topic, or an admin of the group, can remove it (with all its replies).

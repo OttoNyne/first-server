@@ -10,6 +10,7 @@ import { toPublicUser } from "../utils/serialize.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { cleanLine } from "../utils/profileFields.js";
 import { cleanBody } from "../utils/blogText.js";
+import { allowEdit } from "../utils/textInput.js";
 
 // Bulletins: a short message to all of your friends at once, on a board only friends can see. They expire.
 export const bulletinsRouter = Router();
@@ -55,6 +56,7 @@ bulletinsRouter.get("/", async (req, res) => {
           title: b.title,
           body: b.body,
           createdAt: b.createdAt,
+          editedAt: b.editedAt ?? null,
           expiresAt: b.expireAt,
           isMine: String(b.author._id) === String(req.user.id),
           author: await toPublicUser(b.author, req.user.id),
@@ -91,7 +93,27 @@ bulletinsRouter.post("/", requireVerifiedEmail, async (req, res) => {
   const bulletin = await Bulletin.create({ author: req.user.id, title: checked.title, body: checked.body, expireAt: new Date(Date.now() + KEEP_MS) });
   await bulletin.populate("author");
   res.status(201).json({
-    bulletin: { id: bulletin._id, title: bulletin.title, body: bulletin.body, createdAt: bulletin.createdAt, expiresAt: bulletin.expireAt, isMine: true, author: await toPublicUser(bulletin.author, req.user.id) },
+    bulletin: { id: bulletin._id, title: bulletin.title, body: bulletin.body, createdAt: bulletin.createdAt, editedAt: null, expiresAt: bulletin.expireAt, isMine: true, author: await toPublicUser(bulletin.author, req.user.id) },
+  });
+});
+
+// Change your own bulletin (its ten days don't start again). Marked as edited.
+bulletinsRouter.patch("/:id", async (req, res) => {
+  if (!validId(req.params.id)) return res.status(404).json({ error: "Bulletin not found" });
+  const bulletin = await Bulletin.findOne({ _id: req.params.id, author: req.user.id, expireAt: { $gt: new Date() } });
+  if (!bulletin) return res.status(404).json({ error: "Bulletin not found" });
+  const checked = checkBulletin({ title: req.body?.title ?? bulletin.title, body: req.body?.body ?? bulletin.body });
+  if (checked.error) return res.status(400).json({ error: checked.error });
+  if (!(await allowEdit(req, res))) return;
+  if (checked.title !== bulletin.title || checked.body !== bulletin.body) {
+    bulletin.title = checked.title;
+    bulletin.body = checked.body;
+    bulletin.editedAt = new Date();
+    await bulletin.save();
+  }
+  await bulletin.populate("author");
+  res.json({
+    bulletin: { id: bulletin._id, title: bulletin.title, body: bulletin.body, createdAt: bulletin.createdAt, editedAt: bulletin.editedAt, expiresAt: bulletin.expireAt, isMine: true, author: await toPublicUser(bulletin.author, req.user.id) },
   });
 });
 

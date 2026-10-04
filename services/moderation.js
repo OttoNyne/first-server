@@ -37,15 +37,15 @@ export async function loadTarget(type, id, viewerId) {
     }
     case "post": {
       const p = await Post.findById(id).populate("author");
-      return p ? shape(p.author, { text: clip(p.content), image: p.imageUrl ?? null, link: `/posts/${p._id}` }) : { exists: false, authorId: null };
+      return p ? shape(p.author, { text: clip(p.content), image: p.imageUrl ?? null, link: `/posts/${p._id}`, edited: Boolean(p.editedAt) }) : { exists: false, authorId: null };
     }
     case "comment": {
       const c = await Comment.findById(id).populate("author");
-      return c ? shape(c.author, { text: clip(c.content), link: `/posts/${c.post}` }) : { exists: false, authorId: null };
+      return c ? shape(c.author, { text: clip(c.content), link: `/posts/${c.post}`, edited: Boolean(c.editedAt) }) : { exists: false, authorId: null };
     }
     case "profileComment": {
       const c = await ProfileComment.findById(id).populate("author").populate("profileOwner");
-      return c ? shape(c.author, { text: clip(c.content), link: c.profileOwner ? `/u/${c.profileOwner.username}` : null }) : { exists: false, authorId: null };
+      return c ? shape(c.author, { text: clip(c.content), link: c.profileOwner ? `/u/${c.profileOwner.username}` : null, edited: Boolean(c.editedAt) }) : { exists: false, authorId: null };
     }
     case "blogEntry": {
       const b = await BlogEntry.findById(id).populate("author");
@@ -53,15 +53,15 @@ export async function loadTarget(type, id, viewerId) {
     }
     case "bulletin": {
       const b = await Bulletin.findById(id).populate("author");
-      return b ? shape(b.author, { title: b.title, text: clip(b.body), link: null }) : { exists: false, authorId: null };
+      return b ? shape(b.author, { title: b.title, text: clip(b.body), link: null, edited: Boolean(b.editedAt) }) : { exists: false, authorId: null };
     }
     case "groupTopic": {
       const t = await GroupTopic.findById(id).populate("author");
-      return t ? shape(t.author, { title: t.title, text: clip(t.body), link: `/groups/${t.group}` }) : { exists: false, authorId: null };
+      return t ? shape(t.author, { title: t.title, text: clip(t.body), link: `/groups/${t.group}`, edited: Boolean(t.editedAt) }) : { exists: false, authorId: null };
     }
     case "groupReply": {
       const r = await GroupReply.findById(id).populate("author");
-      return r ? shape(r.author, { text: clip(r.body), link: `/groups/${r.group}` }) : { exists: false, authorId: null };
+      return r ? shape(r.author, { text: clip(r.body), link: `/groups/${r.group}`, edited: Boolean(r.editedAt) }) : { exists: false, authorId: null };
     }
   }
   return { exists: false, authorId: null };

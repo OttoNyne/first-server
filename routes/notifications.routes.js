@@ -1,4 +1,5 @@
 import { Router } from "express";
+import mongoose from "mongoose";
 import { Notification } from "../models/Notification.js";
 import { Friendship } from "../models/Friendship.js";
 import { User } from "../models/User.js";
@@ -12,9 +13,11 @@ notificationsRouter.use(requireAuth);
 notificationsRouter.get("/", async (req, res) => {
   // a server that slept through a start time catches up the moment anyone looks
   await processDueReminders().catch((err) => console.error("Reminder check failed:", err.message));
-  const notifications = await Notification.find({ recipient: req.user.id })
-    .sort("-createdAt -_id")
-    .limit(50);
+  // Newest first, thirty at a time; ?before=<notification id> asks for the ones older than that.
+  const filter = { recipient: req.user.id };
+  if (typeof req.query.before === "string" && mongoose.isValidObjectId(req.query.before)) filter._id = { $lt: req.query.before };
+  const found = await Notification.find(filter).sort({ _id: -1 }).limit(31);
+  const notifications = found.slice(0, 30);
 
   const actorIds = notifications.map((n) => n.payload?.actorId).filter(Boolean);
   const actors = await User.find({ _id: { $in: actorIds } });
@@ -28,6 +31,7 @@ notificationsRouter.get("/", async (req, res) => {
   const friendshipMap = new Map(friendships.map((f) => [String(f._id), f.status]));
 
   res.json({
+    hasMore: found.length > 30,
     notifications: await Promise.all(
       notifications.map(async (n) => ({
         id: n._id,

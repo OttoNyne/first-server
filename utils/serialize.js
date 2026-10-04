@@ -51,6 +51,7 @@ export async function toPublicComment(comment, viewerId) {
     id: comment._id,
     content: comment.content,
     createdAt: comment.createdAt,
+    editedAt: comment.editedAt ?? null,
     author: await toPublicUser(comment.author, viewerId),
   };
 }
@@ -68,6 +69,7 @@ export async function toPublicPost(post, commentCount = 0, viewerId) {
     isAiText: post.isAiText,
     isAiImage: post.isAiImage,
     createdAt: post.createdAt,
+    editedAt: post.editedAt ?? null,
     commentCount,
   };
 }

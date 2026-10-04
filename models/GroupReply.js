@@ -9,6 +9,8 @@ const groupReplySchema = new mongoose.Schema(
     group: { type: mongoose.Schema.Types.ObjectId, ref: "Group", required: true },
     author: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     body: { type: String, required: true, maxlength: MAX_REPLY_BODY },
+    // When the author last changed what they wrote (null if never).
+    editedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

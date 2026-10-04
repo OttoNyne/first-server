@@ -7,6 +7,11 @@ import { toPublicPost } from "../utils/serialize.js";
 import { assertVisible, getProfileForViewer } from "../utils/visibility.js";
 import mongoose from "mongoose";
 import { deleteStoredAssetIfUnused } from "../services/storedAssets.js";
+import { MAX_POST, allowEdit, checkText, cursorFilter } from "../utils/textInput.js";
+import { createLimiter } from "../utils/rateLimit.js";
+
+const PAGE = 20;
+const postLimiter = createLimiter({ name: "post-create", limit: 20, windowMs: 10 * 60 * 1000 });
 
 export const postsRouter = Router();
 postsRouter.use(requireAuth);
@@ -29,19 +34,25 @@ postsRouter.get("/feed", async (req, res) => {
     String(f.requester) === req.user.id ? f.addressee : f.requester
   );
 
-  const posts = await Post.find({ author: { $in: [req.user.id, ...friendIds] } })
-    .sort("-createdAt")
-    .limit(50)
-    .populate("author");
+  // Newest first, twenty at a time; ?before=<post id> asks for the ones older than that.
+  const filter = { author: { $in: [req.user.id, ...friendIds] } };
+  const before = cursorFilter(req.query, mongoose);
+  if (before) filter._id = { $lt: before };
+  const found = await Post.find(filter).sort({ _id: -1 }).limit(PAGE + 1).populate("author");
+  const posts = found.slice(0, PAGE);
 
-  res.json({ posts: await withCommentCounts(posts, req.user.id) });
+  res.json({ posts: await withCommentCounts(posts, req.user.id), hasMore: found.length > PAGE });
 });
 
 postsRouter.get("/user/:username", async (req, res) => {
   try {
     const user = await getProfileForViewer(req.params.username, req.user.id);
-    const posts = await Post.find({ author: user._id }).sort("-createdAt").populate("author");
-    res.json({ posts: await withCommentCounts(posts, req.user.id) });
+    const filter = { author: user._id };
+    const before = cursorFilter(req.query, mongoose);
+    if (before) filter._id = { $lt: before };
+    const found = await Post.find(filter).sort({ _id: -1 }).limit(PAGE + 1).populate("author");
+    const posts = found.slice(0, PAGE);
+    res.json({ posts: await withCommentCounts(posts, req.user.id), hasMore: found.length > PAGE });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
@@ -90,9 +101,15 @@ function readFraming(body) {
 postsRouter.post("/", async (req, res) => {
   const { framing, error } = readFraming(req.body);
   if (error) return res.status(400).json({ error });
+  const text = checkText(req.body?.content, MAX_POST, "Posts");
+  if (text.error) return res.status(400).json({ error: text.error });
+  if (!(await postLimiter.allow(req.user.id))) {
+    res.set("Retry-After", String(postLimiter.windowSeconds));
+    return res.status(429).json({ error: "You're posting too fast — try again in a few minutes." });
+  }
   const post = await Post.create({
     author: req.user.id,
-    content: req.body.content,
+    content: text.value,
     imageUrl: req.body.imageUrl,
     ...(req.body.imageUrl ? framing : {}),
     isAiText: req.body.isAiText || false,
@@ -100,6 +117,25 @@ postsRouter.post("/", async (req, res) => {
   });
   await post.populate("author");
   res.status(201).json({ post: await toPublicPost(post, 0, req.user.id) });
+});
+
+// Change the words of your own post (the picture and its framing stay as they are). Marked as edited.
+postsRouter.patch("/:id", async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: "Post not found" });
+  const post = await Post.findById(req.params.id);
+  if (!post) return res.status(404).json({ error: "Post not found" });
+  if (String(post.author) !== req.user.id) return res.status(403).json({ error: "Not allowed" });
+  const text = checkText(req.body?.content, MAX_POST, "Posts");
+  if (text.error) return res.status(400).json({ error: text.error });
+  if (!(await allowEdit(req, res))) return;
+  if (text.value !== post.content) {
+    post.content = text.value;
+    post.editedAt = new Date();
+    await post.save();
+  }
+  await post.populate("author");
+  const [withCount] = await withCommentCounts([post], req.user.id);
+  res.json({ post: withCount });
 });
 
 postsRouter.delete("/:id", async (req, res) => {

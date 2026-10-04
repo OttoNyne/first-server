@@ -1,4 +1,5 @@
 import { Router } from "express";
+import mongoose from "mongoose";
 import { User } from "../models/User.js";
 import { TopFriend } from "../models/TopFriend.js";
 import { ProfileComment } from "../models/ProfileComment.js";
@@ -16,6 +17,7 @@ import { checkHidden, checkOrder } from "../utils/profileSections.js";
 import { areFriends, blockedUserIds, getProfileForViewer } from "../utils/visibility.js";
 import { activityFor } from "../utils/activity.js";
 import { ProfileView } from "../models/ProfileView.js";
+import { MAX_COMMENT, allowEdit, checkText, cursorFilter } from "../utils/textInput.js";
 import { deleteStoredAssetIfUnused } from "../services/storedAssets.js";
 import { toPublicUser, toPublicTrack, toPublicComment } from "../utils/serialize.js";
 import { escapeRegex } from "../utils/regex.js";
@@ -271,13 +273,35 @@ profilesRouter.get("/:username/top-friends", attachUserIfPresent, async (req, re
 profilesRouter.get("/:username/comments", attachUserIfPresent, async (req, res) => {
   try {
     const user = await getProfileForViewer(req.params.username, req.user?.id);
-    const comments = await ProfileComment.find({ profileOwner: user._id })
-      .sort("-createdAt")
-      .populate("author");
-    res.json({ comments: await Promise.all(comments.map((c) => toPublicComment(c, req.user?.id))) });
+    // Newest first, twenty at a time; ?before=<comment id> asks for the ones older than that.
+    const filter = { profileOwner: user._id };
+    const before = cursorFilter(req.query, mongoose);
+    if (before) filter._id = { $lt: before };
+    const found = await ProfileComment.find(filter).sort({ _id: -1 }).limit(21).populate("author");
+    const comments = found.slice(0, 20);
+    res.json({ comments: await Promise.all(comments.map((c) => toPublicComment(c, req.user?.id))), hasMore: found.length > 20 });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
+});
+
+const guestbookLimiter = createLimiter({ name: "guestbook-create", limit: 20, windowMs: 10 * 60 * 1000 });
+
+// Change a testimonial you wrote (the profile's owner can delete it, but only its author can change what it says).
+profilesRouter.patch("/comments/:commentId", requireAuth, async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.commentId)) return res.status(404).json({ error: "Comment not found" });
+  const comment = await ProfileComment.findById(req.params.commentId);
+  if (!comment || String(comment.author) !== req.user.id) return res.status(404).json({ error: "Comment not found" });
+  const text = checkText(req.body?.content, MAX_COMMENT, "Testimonials");
+  if (text.error) return res.status(400).json({ error: text.error });
+  if (!(await allowEdit(req, res))) return;
+  if (text.value !== comment.content) {
+    comment.content = text.value;
+    comment.editedAt = new Date();
+    await comment.save();
+  }
+  await comment.populate("author");
+  res.json({ comment: await toPublicComment(comment, req.user.id) });
 });
 
 profilesRouter.post("/:username/comments", requireAuth, async (req, res) => {
@@ -287,10 +311,16 @@ profilesRouter.post("/:username/comments", requireAuth, async (req, res) => {
   } catch (err) {
     return res.status(err.status || 500).json({ error: err.message });
   }
+  const text = checkText(req.body?.content, MAX_COMMENT, "Testimonials");
+  if (text.error) return res.status(400).json({ error: text.error });
+  if (!(await guestbookLimiter.allow(req.user.id))) {
+    res.set("Retry-After", String(guestbookLimiter.windowSeconds));
+    return res.status(429).json({ error: "You're writing testimonials too fast — try again in a few minutes." });
+  }
   let comment = await ProfileComment.create({
     profileOwner: owner._id,
     author: req.user.id,
-    content: req.body.content,
+    content: text.value,
   });
   comment = await comment.populate("author");
   if (String(owner._id) !== req.user.id) {

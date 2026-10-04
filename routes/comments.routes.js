@@ -6,6 +6,12 @@ import { Notification } from "../models/Notification.js";
 import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { toPublicComment } from "../utils/serialize.js";
 import { assertVisible } from "../utils/visibility.js";
+import mongoose from "mongoose";
+import { MAX_COMMENT, allowEdit, checkText, cursorFilter } from "../utils/textInput.js";
+import { createLimiter } from "../utils/rateLimit.js";
+
+const PAGE = 20;
+const commentLimiter = createLimiter({ name: "comment-create", limit: 40, windowMs: 10 * 60 * 1000 });
 
 export const commentsRouter = Router();
 
@@ -15,8 +21,13 @@ commentsRouter.get("/posts/:postId/comments", attachUserIfPresent, async (req, r
     if (!post) return res.status(404).json({ error: "Post not found" });
     await assertVisible(await User.findById(post.author), req.user?.id);
 
-    const comments = await Comment.find({ post: req.params.postId }).sort("createdAt").populate("author");
-    res.json({ comments: await Promise.all(comments.map((c) => toPublicComment(c, req.user?.id))) });
+    // Oldest first, twenty at a time; ?after=<comment id> asks for the ones that came after that.
+    const filter = { post: req.params.postId };
+    const after = cursorFilter(req.query, mongoose, "after");
+    if (after) filter._id = { $gt: after };
+    const found = await Comment.find(filter).sort({ _id: 1 }).limit(PAGE + 1).populate("author");
+    const comments = found.slice(0, PAGE);
+    res.json({ comments: await Promise.all(comments.map((c) => toPublicComment(c, req.user?.id))), hasMore: found.length > PAGE });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
@@ -32,10 +43,16 @@ commentsRouter.post("/posts/:postId/comments", requireAuth, async (req, res) => 
     return res.status(err.status || 500).json({ error: err.message });
   }
 
+  const text = checkText(req.body?.content, MAX_COMMENT, "Comments");
+  if (text.error) return res.status(400).json({ error: text.error });
+  if (!(await commentLimiter.allow(req.user.id))) {
+    res.set("Retry-After", String(commentLimiter.windowSeconds));
+    return res.status(429).json({ error: "You're commenting too fast — try again in a few minutes." });
+  }
   let comment = await Comment.create({
     post: post._id,
     author: req.user.id,
-    content: req.body.content,
+    content: text.value,
   });
   comment = await comment.populate("author");
 
@@ -48,6 +65,24 @@ commentsRouter.post("/posts/:postId/comments", requireAuth, async (req, res) => 
   }
 
   res.status(201).json({ comment: await toPublicComment(comment, req.user.id) });
+});
+
+// Change your own comment. Marked as edited.
+commentsRouter.patch("/comments/:id", requireAuth, async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: "Comment not found" });
+  const comment = await Comment.findById(req.params.id);
+  if (!comment) return res.status(404).json({ error: "Comment not found" });
+  if (String(comment.author) !== req.user.id) return res.status(403).json({ error: "Not allowed" });
+  const text = checkText(req.body?.content, MAX_COMMENT, "Comments");
+  if (text.error) return res.status(400).json({ error: text.error });
+  if (!(await allowEdit(req, res))) return;
+  if (text.value !== comment.content) {
+    comment.content = text.value;
+    comment.editedAt = new Date();
+    await comment.save();
+  }
+  await comment.populate("author");
+  res.json({ comment: await toPublicComment(comment, req.user.id) });
 });
 
 commentsRouter.delete("/comments/:id", requireAuth, async (req, res) => {

@@ -15,6 +15,8 @@ const groupTopicSchema = new mongoose.Schema(
     replyCount: { type: Number, default: 0, min: 0 },
     // The topic's own time at first, then the time of its latest reply: busy topics rise.
     lastActivityAt: { type: Date, required: true },
+    // When the author last changed what they wrote (null if never).
+    editedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

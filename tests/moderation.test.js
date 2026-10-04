@@ -187,6 +187,18 @@ describe("moderation review queue", () => {
       expect(longCase.target.text.endsWith("…")).toBe(true);
     });
 
+    it("tells the moderator when something was changed after it was written", async () => {
+      const boss = await makeAdmin();
+      const author = await signup(app, "author");
+      const rep = await signup(app, "rep1");
+      const made = (await author.agent.post("/api/posts").send({ content: "Original words" })).body.post;
+      await report(rep, "post", made.id);
+      expect((await queue(boss)).cases[0].target.edited).toBe(false);
+      await author.agent.patch(`/api/posts/${made.id}`).send({ content: "Different words" });
+      const { cases } = await queue(boss);
+      expect(cases[0].target).toMatchObject({ text: "Different words", edited: true });
+    });
+
     it("pages twenty cases at a time, and leaves out handled ones", async () => {
       const boss = await makeAdmin();
       const author = await signup(app, "author");
