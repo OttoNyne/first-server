@@ -72,7 +72,7 @@ profilesRouter.get("/tags", requireAuth, async (req, res) => {
 
 profilesRouter.patch("/me", requireAuth, async (req, res) => {
   const user = await User.findById(req.user.id);
-  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections, showActivity, profileViews } = req.body;
+  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections, showActivity, profileViews, showConnections } = req.body;
   const fields = {};
   for (const [name, value, max, label] of [["mood", mood, MAX_MOOD, "Mood"], ["listeningTo", listeningTo, MAX_LISTENING, "Listening to"]]) {
     if (value === undefined) continue;
@@ -96,6 +96,10 @@ profilesRouter.patch("/me", requireAuth, async (req, res) => {
     fields.showActivity = showActivity;
     // turning it off also forgets when they were last active
     if (!showActivity) fields.lastActiveAt = null;
+  }
+  if (showConnections !== undefined) {
+    if (typeof showConnections !== "boolean") return res.status(400).json({ error: "showConnections must be true or false" });
+    fields.showConnections = showConnections;
   }
   if (profileViews !== undefined) {
     if (typeof profileViews !== "boolean") return res.status(400).json({ error: "profileViews must be true or false" });

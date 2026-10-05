@@ -9,6 +9,7 @@ import { Group } from "../models/Group.js";
 import { GroupMembership } from "../models/GroupMembership.js";
 import { MediaItem } from "../models/MediaItem.js";
 import { Track } from "../models/Track.js";
+import { DismissedSuggestion } from "../models/DismissedSuggestion.js";
 import { TrackPlay } from "../models/TrackPlay.js";
 import { Notification } from "../models/Notification.js";
 import { ScheduledLive } from "../models/ScheduledLive.js";
@@ -89,6 +90,7 @@ export async function deleteAccount(userId) {
 
   await Friendship.deleteMany({ $or: [{ requester: id }, { addressee: id }] });
   await TopFriend.deleteMany({ $or: [{ owner: id }, { target: id }] });
+  await DismissedSuggestion.deleteMany({ $or: [{ owner: id }, { target: id }] });
   await GroupMembership.deleteMany({ user: id });
   await Block.deleteMany({ $or: [{ blocker: id }, { blocked: id }] });
   // Reactions on their pictures, and reactions they left on others'.

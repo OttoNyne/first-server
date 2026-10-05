@@ -50,6 +50,9 @@ const userSchema = new mongoose.Schema(
     // "Online now" / "active today": when their page last checked in, and whether their friends may see it (see utils/activity.js).
     lastActiveAt: { type: Date, default: null },
     showActivity: { type: Boolean, default: true },
+    // Whether they may be used to connect people: named as a mutual friend, suggested to friends of their friends, and their friends
+    // suggested through them (see utils/friendGraph.js). On by default; switching it off keeps who they know to themselves.
+    showConnections: { type: Boolean, default: true },
     // Opt-in profile views (default off): they may see who visits their profile, and visitors they look at may see them (see routes/profileViews.routes.js).
     profileViews: { type: Boolean, default: false },
     // Sessions (JWTs) issued before this moment are rejected — set when the
@@ -88,7 +91,7 @@ userSchema.methods.comparePassword = function (candidate) {
 userSchema.methods.toPublic = function ({ includeEmail = false } = {}) {
   return {
     id: this._id,
-    ...(includeEmail ? { email: this.email, emailVerified: this.emailVerified, showActivity: this.showActivity !== false, profileViews: this.profileViews === true, isAdmin: isAdminUser(this) } : {}),
+    ...(includeEmail ? { email: this.email, emailVerified: this.emailVerified, showActivity: this.showActivity !== false, profileViews: this.profileViews === true, showConnections: this.showConnections !== false, isAdmin: isAdminUser(this) } : {}),
     username: this.username,
     displayName: this.displayName,
     bio: this.bio,
