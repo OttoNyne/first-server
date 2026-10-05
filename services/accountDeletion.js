@@ -25,6 +25,7 @@ import { Task } from "../models/Task.js";
 import { UsernameHistory } from "../models/UsernameHistory.js";
 import { MediaReaction } from "../models/MediaReaction.js";
 import { MediaComment } from "../models/MediaComment.js";
+import { BlogComment } from "../models/BlogComment.js";
 import { releasePictures } from "./commentPictures.js";
 import { Event } from "../models/Event.js";
 import { EventRsvp } from "../models/EventRsvp.js";
@@ -79,6 +80,9 @@ export async function deleteAccount(userId) {
   await Post.deleteMany({ author: id });
   const blogIds = (await BlogEntry.find({ author: id }).select("_id")).map((e) => e._id);
   await BlogEntry.deleteMany({ author: id });
+  const blogComments = await BlogComment.find({ $or: [{ author: id }, { entry: { $in: blogIds } }] }).select("_id author imageUrl");
+  await BlogComment.deleteMany({ _id: { $in: blogComments.map((c) => c._id) } });
+  await releasePictures(blogComments.filter((c) => String(c.author) !== String(id)));
   const bulletinIds = (await Bulletin.find({ author: id }).select("_id")).map((b) => b._id);
   await Bulletin.deleteMany({ author: id });
   await ProfileView.deleteMany({ $or: [{ owner: id }, { viewer: id }] });
@@ -142,7 +146,7 @@ export async function deleteAccount(userId) {
   await Notification.deleteMany({ $or: [{ recipient: id }, { "payload.actorId": { $in: [String(id), id] } }] });
 
   // Their reports, and reports about them or their content.
-  const targetIds = [id, ...postIds, ...comments.map((c) => c._id), ...profileComments.map((c) => c._id), ...mediaComments.map((c) => c._id), ...eventIds, ...blogIds, ...bulletinIds, ...topicIds, ...replyIds];
+  const targetIds = [id, ...postIds, ...comments.map((c) => c._id), ...profileComments.map((c) => c._id), ...mediaComments.map((c) => c._id), ...blogComments.map((c) => c._id), ...eventIds, ...blogIds, ...bulletinIds, ...topicIds, ...replyIds];
   await Report.deleteMany({ $or: [{ reporter: id }, { targetId: { $in: targetIds } }] });
 
   const filesRemoved = await deleteAllStoredAssets(id);

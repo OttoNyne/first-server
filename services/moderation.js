@@ -3,6 +3,7 @@ import { Post } from "../models/Post.js";
 import { Comment } from "../models/Comment.js";
 import { ProfileComment } from "../models/ProfileComment.js";
 import { MediaComment } from "../models/MediaComment.js";
+import { BlogComment } from "../models/BlogComment.js";
 import { Event } from "../models/Event.js";
 import { EventRsvp } from "../models/EventRsvp.js";
 import { removeEventNotifications } from "./events.js";
@@ -20,7 +21,7 @@ import { releasePictures } from "./commentPictures.js";
 import { isAdminUser } from "../utils/admin.js";
 import { ABOUT_FIELDS } from "../utils/about.js";
 
-export const CONTENT_TYPES = ["post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment", "event"];
+export const CONTENT_TYPES = ["post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment", "event", "blogComment"];
 export const REPORT_TYPES = ["user", ...CONTENT_TYPES];
 const PREVIEW_CHARS = 600;
 const clip = (text) => (typeof text === "string" && text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS)}…` : (text ?? ""));
@@ -62,6 +63,10 @@ export async function loadTarget(type, id, viewerId) {
       const owner = c?.item?.owner;
       return c ? shape(c.author, { text: clip(c.content), image: c.imageUrl ?? null, link: owner ? `/u/${owner.username}?piece=${c.item._id}&comment=${c._id}#portfolio` : null, edited: Boolean(c.editedAt) }) : { exists: false, authorId: null };
     }
+    case "blogComment": {
+      const c = await BlogComment.findById(id).populate("author");
+      return c ? shape(c.author, { text: clip(c.content), image: c.imageUrl ?? null, link: `/blog/${c.entry}?comment=${c._id}`, edited: Boolean(c.editedAt) }) : { exists: false, authorId: null };
+    }
     case "blogEntry": {
       const b = await BlogEntry.findById(id).populate("author");
       return b ? shape(b.author, { title: b.title, text: clip(b.body), link: `/blog/${b._id}` }) : { exists: false, authorId: null };
@@ -97,8 +102,9 @@ export async function removeContent(type, id) {
     }
     case "comment":
     case "profileComment":
-    case "mediaComment": {
-      const Model = type === "comment" ? Comment : type === "profileComment" ? ProfileComment : MediaComment;
+    case "mediaComment":
+    case "blogComment": {
+      const Model = type === "comment" ? Comment : type === "profileComment" ? ProfileComment : type === "mediaComment" ? MediaComment : BlogComment;
       const removed = await Model.findByIdAndDelete(id);
       if (removed) await releasePictures([removed]);
       return removed !== null;
@@ -113,7 +119,12 @@ export async function removeContent(type, id) {
     }
     case "blogEntry": {
       const entry = await BlogEntry.findByIdAndDelete(id);
-      if (entry) await Notification.deleteMany({ type: "blog_post", "payload.entryId": String(entry._id) });
+      if (entry) {
+        await Notification.deleteMany({ type: { $in: ["blog_post", "blog_comment"] }, "payload.entryId": String(entry._id) });
+        const withPictures = await BlogComment.find({ entry: entry._id, imageUrl: { $ne: null } });
+        await BlogComment.deleteMany({ entry: entry._id });
+        await releasePictures(withPictures);
+      }
       return entry !== null;
     }
     case "bulletin":
@@ -132,7 +143,7 @@ export async function removeContent(type, id) {
   return false;
 }
 
-const WHAT = { post: "post", comment: "comment", profileComment: "testimonial", mediaComment: "comment on a portfolio piece", event: "event", blogEntry: "blog entry", bulletin: "bulletin", groupTopic: "group topic", groupReply: "group reply" };
+const WHAT = { post: "post", comment: "comment", profileComment: "testimonial", mediaComment: "comment on a portfolio piece", blogComment: "comment on a blog entry", event: "event", blogEntry: "blog entry", bulletin: "bulletin", groupTopic: "group topic", groupReply: "group reply" };
 
 export async function suspendUser(userId, note) {
   await User.updateOne({ _id: userId }, { $set: { suspendedAt: new Date(), suspensionNote: note ?? "" } });

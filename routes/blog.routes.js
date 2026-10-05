@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 import { BlogEntry } from "../models/BlogEntry.js";
 import { Friendship } from "../models/Friendship.js";
 import { Notification } from "../models/Notification.js";
+import { BlogComment } from "../models/BlogComment.js";
+import { releasePictures } from "../services/commentPictures.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireVerifiedEmail } from "../middleware/requireVerifiedEmail.js";
 import { assertVisible, getProfileForViewer } from "../utils/visibility.js";
@@ -19,8 +21,9 @@ const MAX_ENTRIES_PER_AUTHOR = 200;
 const writeLimiter = createLimiter({ name: "blog-write", limit: 10, windowMs: 60 * 60 * 1000 });
 const validId = (id) => mongoose.isValidObjectId(id);
 
-const summary = (e) => ({ id: e._id, title: e.title, excerpt: excerptOf(e.body), createdAt: e.createdAt, updatedAt: e.updatedAt });
+const summary = (e, commentCount = 0) => ({ id: e._id, title: e.title, excerpt: excerptOf(e.body), createdAt: e.createdAt, updatedAt: e.updatedAt, commentCount });
 const full = async (e, author, viewerId) => ({
+  commentCount: await BlogComment.countDocuments({ entry: e._id }),
   id: e._id,
   title: e.title,
   body: e.body,
@@ -42,7 +45,15 @@ async function notifyFriends(entry, authorId) {
   }
 }
 
-export const removeBlogNotifications = (entryIds) => Notification.deleteMany({ type: "blog_post", "payload.entryId": { $in: entryIds.map(String) } });
+// What an entry sent (the announcement to friends, and the note to its author about each comment), once it is gone.
+export const removeBlogNotifications = (entryIds) => Notification.deleteMany({ type: { $in: ["blog_post", "blog_comment"] }, "payload.entryId": { $in: entryIds.map(String) } });
+
+/** An entry is gone: its comments go with it, and their pictures. */
+export async function removeBlogComments(entryIds) {
+  const withPictures = await BlogComment.find({ entry: { $in: entryIds }, imageUrl: { $ne: null } });
+  await BlogComment.deleteMany({ entry: { $in: entryIds } });
+  await releasePictures(withPictures);
+}
 
 // Someone's entries, newest first, ten at a time. Same gate as the rest of their profile.
 blogRouter.get("/user/:username", async (req, res) => {
@@ -53,7 +64,9 @@ blogRouter.get("/user/:username", async (req, res) => {
       .sort({ createdAt: -1, _id: -1 })
       .skip((page - 1) * PAGE)
       .limit(PAGE + 1);
-    res.json({ entries: found.slice(0, PAGE).map(summary), page, hasMore: found.length > PAGE });
+    const entries = found.slice(0, PAGE);
+    const counts = new Map((await BlogComment.aggregate([{ $match: { entry: { $in: entries.map((e) => e._id) } } }, { $group: { _id: "$entry", n: { $sum: 1 } } }])).map((c) => [String(c._id), c.n]));
+    res.json({ entries: entries.map((e) => summary(e, counts.get(String(e._id)) ?? 0)), page, hasMore: found.length > PAGE });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
@@ -110,5 +123,6 @@ blogRouter.delete("/:id", async (req, res) => {
   const entry = await BlogEntry.findOneAndDelete({ _id: req.params.id, author: req.user.id });
   if (!entry) return res.status(404).json({ error: "Entry not found" });
   await removeBlogNotifications([entry._id]);
+  await removeBlogComments([entry._id]);
   res.status(204).end();
 });
