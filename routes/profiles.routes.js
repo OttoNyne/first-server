@@ -32,6 +32,7 @@ profilesRouter.get("/", requireAuth, async (req, res) => {
   const pattern = escapeRegex(search);
   const users = await User.find({
     suspendedAt: null,
+    _id: { $nin: [...(await blockedUserIds(req.user.id))] },
     $or: [{ username: { $regex: pattern, $options: "i" } }, { displayName: { $regex: pattern, $options: "i" } }],
   }).limit(20);
   res.json({ users: await Promise.all(users.map((u) => toPublicUser(u, req.user.id))) });

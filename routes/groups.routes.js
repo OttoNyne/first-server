@@ -13,7 +13,7 @@ import { escapeRegex } from "../utils/regex.js";
 export const groupsRouter = Router();
 groupsRouter.use(requireAuth);
 
-async function withMemberInfo(groups, viewerId) {
+export async function withMemberInfo(groups, viewerId) {
   const counts = await GroupMembership.aggregate([
     { $match: { group: { $in: groups.map((g) => g._id) } } },
     { $group: { _id: "$group", count: { $sum: 1 } } },

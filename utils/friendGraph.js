@@ -36,16 +36,28 @@ export async function mutualIds(viewerId, target) {
   return both.filter((id) => ok.has(id));
 }
 
-/** How many mutual friends each of these people has with the viewer: Map(personId -> count). For a list such as friend requests. */
+/** How many mutual friends each of these people has with the viewer: Map(personId -> count). For a list such as friend requests or search results. */
 export async function mutualCounts(viewerId, people) {
   const result = new Map();
-  if (!people.length) return result;
-  const mine = await friendIdsOf(viewerId);
-  const lists = await Promise.all(people.map(async (p) => ({ id: String(p._id), off: p.showConnections === false, friends: p.showConnections === false ? new Set() : await friendIdsOf(p._id) })));
-  const candidates = new Set();
-  for (const l of lists) for (const f of l.friends) if (mine.has(f)) candidates.add(f);
-  const ok = await usable([...candidates]);
-  for (const l of lists) result.set(l.id, l.off ? 0 : [...l.friends].filter((f) => mine.has(f) && ok.has(f)).length);
+  for (const p of people) result.set(String(p._id), 0);
+  const mine = [...(await friendIdsOf(viewerId))];
+  const shown = people.filter((p) => p.showConnections !== false);
+  if (!mine.length || !shown.length) return result;
+  // one look-up for every friendship between these people and the viewer's friends, so no more rows than there are mutual friends
+  const ids = shown.map((p) => p._id);
+  const rows = await Friendship.find({ status: "accepted", $or: [{ requester: { $in: ids }, addressee: { $in: mine } }, { addressee: { $in: ids }, requester: { $in: mine } }] }).select("requester addressee");
+  const mineSet = new Set(mine);
+  const shownIds = new Set(ids.map(String));
+  const through = new Map(); // person -> the viewer's friends who know them
+  for (const r of rows) {
+    const x = String(r.requester);
+    const y = String(r.addressee);
+    const [person, friend] = shownIds.has(x) && mineSet.has(y) ? [x, y] : [y, x];
+    if (!through.has(person)) through.set(person, new Set());
+    through.get(person).add(friend);
+  }
+  const ok = await usable([...new Set([...through.values()].flatMap((set) => [...set]))]);
+  for (const [person, set] of through) result.set(person, [...set].filter((f) => ok.has(f)).length);
   return result;
 }
 
