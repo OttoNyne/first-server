@@ -41,9 +41,12 @@ export function toPublicTrack(track) {
     id: track._id,
     ownerId: track.owner,
     title: track.title,
+    artist: track.artist ?? "",
     sourceType: track.sourceType,
     url: track.url,
     position: track.position,
+    profileSong: Boolean(track.profileSong),
+    plays: track.plays ?? 0,
     createdAt: track.createdAt,
   };
 }

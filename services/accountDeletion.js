@@ -9,6 +9,7 @@ import { Group } from "../models/Group.js";
 import { GroupMembership } from "../models/GroupMembership.js";
 import { MediaItem } from "../models/MediaItem.js";
 import { Track } from "../models/Track.js";
+import { TrackPlay } from "../models/TrackPlay.js";
 import { Notification } from "../models/Notification.js";
 import { ScheduledLive } from "../models/ScheduledLive.js";
 import { BlogEntry } from "../models/BlogEntry.js";
@@ -98,6 +99,9 @@ export async function deleteAccount(userId) {
   // Invite links they made, and their name on other people's lists of who came in through a link.
   await Invite.deleteMany({ inviter: id });
   await Invite.updateMany({ "joined.user": id }, { $pull: { joined: { user: id } } });
+  // Their songs, the record of who played them, and the plays they made of other people's.
+  const trackIds = (await Track.find({ owner: id }).select("_id")).map((t) => t._id);
+  await TrackPlay.deleteMany({ $or: [{ listener: id }, { track: { $in: trackIds } }] });
   await Track.deleteMany({ owner: id });
   await Task.deleteMany({ owner: id });
   // Messages they sent or received (the other person's copy is the same document).
