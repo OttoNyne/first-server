@@ -21,6 +21,21 @@ const userSchema = new mongoose.Schema(
     mood: { type: String, default: "", maxlength: 60 },
     listeningTo: { type: String, default: "", maxlength: 80 },
     tags: { type: [String], default: [] },
+    // "About me": a few short answers, an optional place and an optional birthday (month and day only). See utils/about.js.
+    about: {
+      interests: { type: String, default: "", maxlength: 300 },
+      music: { type: String, default: "", maxlength: 300 },
+      movies: { type: String, default: "", maxlength: 300 },
+      books: { type: String, default: "", maxlength: 300 },
+      meet: { type: String, default: "", maxlength: 300 },
+    },
+    location: { type: String, default: "", maxlength: 60 },
+    // Who may see the place: their friends (the default) or everyone who can see the profile.
+    locationAudience: { type: String, enum: ["friends", "everyone"], default: "friends" },
+    // Setting a birthday is choosing to share it with friends and to have them reminded; clearing it forgets it.
+    birthday: { month: { type: Number, min: 1, max: 12 }, day: { type: Number, min: 1, max: 31 } },
+    // The last year friends were told about the birthday (so it is told once a year however often it is changed).
+    lastBirthdayYear: { type: Number, default: null },
     // The order of the sections below the introduction, and which of them are hidden (see utils/profileSections.js).
     sectionOrder: { type: [String], default: [] },
     hiddenSections: { type: [String], default: [] },
@@ -108,5 +123,7 @@ userSchema.methods.toPublicRestricted = function () {
 };
 
 userSchema.index({ tags: 1 });
+// Finding the birthdays that fall on a day.
+userSchema.index({ "birthday.month": 1, "birthday.day": 1 }, { sparse: true });
 
 export const User = mongoose.model("User", userSchema);

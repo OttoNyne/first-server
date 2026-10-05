@@ -15,8 +15,8 @@ describe("section helpers", () => {
   it("completes an order: known sections once each, then whatever is missing in the usual order", () => {
     expect(completeOrder(undefined)).toEqual(SECTION_KEYS);
     expect(completeOrder([])).toEqual(SECTION_KEYS);
-    expect(completeOrder(["blog", "music"])).toEqual(["blog", "music", "friends", "portfolio", "testimonials"]);
-    expect(completeOrder(["music", "nonsense", "music", 7, null, "friends"])).toEqual(["music", "friends", "portfolio", "blog", "testimonials"]);
+    expect(completeOrder(["blog", "music"])).toEqual(["blog", "music", "about", "friends", "portfolio", "testimonials"]);
+    expect(completeOrder(["music", "nonsense", "music", 7, null, "friends"])).toEqual(["music", "friends", "about", "portfolio", "blog", "testimonials"]);
   });
   it("cleans a hidden list", () => {
     expect(cleanHidden(undefined)).toEqual([]);
@@ -60,7 +60,7 @@ describe("rearranging and hiding profile sections", () => {
   it("saves a new order and hidden sections, and everyone who looks sees them", async () => {
     const alice = await signup(app, "alice");
     const bob = await signup(app, "bobby");
-    const order = ["blog", "portfolio", "testimonials", "music", "friends"];
+    const order = ["blog", "portfolio", "testimonials", "music", "friends", "about"];
     const res = await alice.agent.patch("/api/profiles/me").send({ sectionOrder: order, hiddenSections: ["music"] });
     expect(res.status).toBe(200);
     expect(res.body.user).toMatchObject({ sectionOrder: order, hiddenSections: ["music"] });
@@ -83,7 +83,7 @@ describe("rearranging and hiding profile sections", () => {
 
   it("refuses an order that isn't every section once, or a hidden list with unknown names, and changes nothing", async () => {
     const alice = await signup(app, "alice");
-    const order = ["blog", "portfolio", "testimonials", "music", "friends"];
+    const order = ["blog", "portfolio", "testimonials", "music", "friends", "about"];
     await alice.agent.patch("/api/profiles/me").send({ sectionOrder: order, hiddenSections: ["blog"] });
     for (const body of [{ sectionOrder: ["blog"] }, { sectionOrder: "blog" }, { sectionOrder: [...order.slice(1), "music"] }, { sectionOrder: [...order.slice(1), "nope"] }, { hiddenSections: ["nope"] }, { hiddenSections: ["blog", "blog"] }, { hiddenSections: "blog" }, { hiddenSections: [{ $ne: 1 }] }]) {
       const res = await alice.agent.patch("/api/profiles/me").send({ bio: "should not be saved", ...body });
@@ -123,6 +123,6 @@ describe("rearranging and hiding profile sections", () => {
     const alice = await signup(app, "alice");
     const { User } = await import("../models/User.js");
     await User.collection.updateOne({ username: "alice" }, { $set: { sectionOrder: ["music", "friends"] } });
-    expect((await alice.agent.get("/api/profiles/alice")).body.user.sectionOrder).toEqual(["music", "friends", "portfolio", "blog", "testimonials"]);
+    expect((await alice.agent.get("/api/profiles/alice")).body.user.sectionOrder).toEqual(["music", "friends", "about", "portfolio", "blog", "testimonials"]);
   });
 });

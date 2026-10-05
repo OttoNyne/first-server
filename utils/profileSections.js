@@ -1,6 +1,6 @@
 // The parts of a profile page below the introduction, which the owner can put in any order and hide.
 
-export const SECTION_KEYS = ["friends", "music", "portfolio", "blog", "testimonials"];
+export const SECTION_KEYS = ["about", "friends", "music", "portfolio", "blog", "testimonials"];
 
 const known = (key) => SECTION_KEYS.includes(key);
 

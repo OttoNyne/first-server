@@ -17,6 +17,7 @@ import { User } from "../models/User.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { deleteStoredAssetIfUnused } from "./storedAssets.js";
 import { isAdminUser } from "../utils/admin.js";
+import { ABOUT_FIELDS } from "../utils/about.js";
 
 export const CONTENT_TYPES = ["post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment", "event"];
 export const REPORT_TYPES = ["user", ...CONTENT_TYPES];
@@ -37,7 +38,7 @@ export async function loadTarget(type, id, viewerId) {
   switch (type) {
     case "user": {
       const u = await User.findById(id);
-      return u ? shape(u, { text: clip(u.bio ?? ""), title: u.displayName, link: `/u/${u.username}` }) : { exists: false, authorId: null };
+      return u ? shape(u, { text: clip([u.bio, ...ABOUT_FIELDS.map((field) => u.about?.[field]), u.location].filter(Boolean).join("\n")), title: u.displayName, link: `/u/${u.username}` }) : { exists: false, authorId: null };
     }
     case "post": {
       const p = await Post.findById(id).populate("author");
