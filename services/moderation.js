@@ -3,6 +3,9 @@ import { Post } from "../models/Post.js";
 import { Comment } from "../models/Comment.js";
 import { ProfileComment } from "../models/ProfileComment.js";
 import { MediaComment } from "../models/MediaComment.js";
+import { Event } from "../models/Event.js";
+import { EventRsvp } from "../models/EventRsvp.js";
+import { removeEventNotifications } from "./events.js";
 import { BlogEntry } from "../models/BlogEntry.js";
 import { Bulletin } from "../models/Bulletin.js";
 import { GroupTopic } from "../models/GroupTopic.js";
@@ -15,7 +18,7 @@ import { toPublicUser } from "../utils/serialize.js";
 import { deleteStoredAssetIfUnused } from "./storedAssets.js";
 import { isAdminUser } from "../utils/admin.js";
 
-export const CONTENT_TYPES = ["post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment"];
+export const CONTENT_TYPES = ["post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment", "event"];
 export const REPORT_TYPES = ["user", ...CONTENT_TYPES];
 const PREVIEW_CHARS = 600;
 const clip = (text) => (typeof text === "string" && text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS)}…` : (text ?? ""));
@@ -47,6 +50,10 @@ export async function loadTarget(type, id, viewerId) {
     case "profileComment": {
       const c = await ProfileComment.findById(id).populate("author").populate("profileOwner");
       return c ? shape(c.author, { text: clip(c.content), link: c.profileOwner ? `/u/${c.profileOwner.username}` : null, edited: Boolean(c.editedAt) }) : { exists: false, authorId: null };
+    }
+    case "event": {
+      const e = await Event.findById(id).populate("host");
+      return e ? shape(e.host, { title: e.title, text: clip([e.description, e.kind === "online" ? e.link : e.place].filter(Boolean).join("\n")), link: `/events/${e._id}`, edited: Boolean(e.editedAt) }) : { exists: false, authorId: null };
     }
     case "mediaComment": {
       const c = await MediaComment.findById(id).populate("author").populate({ path: "item", populate: { path: "owner" } });
@@ -90,6 +97,14 @@ export async function removeContent(type, id) {
       return (await ProfileComment.findByIdAndDelete(id)) !== null;
     case "mediaComment":
       return (await MediaComment.findByIdAndDelete(id)) !== null;
+    case "event": {
+      const event = await Event.findByIdAndDelete(id);
+      if (event) {
+        await EventRsvp.deleteMany({ event: event._id });
+        await removeEventNotifications(event._id);
+      }
+      return event !== null;
+    }
     case "blogEntry": {
       const entry = await BlogEntry.findByIdAndDelete(id);
       if (entry) await Notification.deleteMany({ type: "blog_post", "payload.entryId": String(entry._id) });
@@ -111,7 +126,7 @@ export async function removeContent(type, id) {
   return false;
 }
 
-const WHAT = { post: "post", comment: "comment", profileComment: "testimonial", mediaComment: "comment on a portfolio piece", blogEntry: "blog entry", bulletin: "bulletin", groupTopic: "group topic", groupReply: "group reply" };
+const WHAT = { post: "post", comment: "comment", profileComment: "testimonial", mediaComment: "comment on a portfolio piece", event: "event", blogEntry: "blog entry", bulletin: "bulletin", groupTopic: "group topic", groupReply: "group reply" };
 
 export async function suspendUser(userId, note) {
   await User.updateOne({ _id: userId }, { $set: { suspendedAt: new Date(), suspensionNote: note ?? "" } });

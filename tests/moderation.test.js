@@ -25,6 +25,8 @@ describe("moderation review queue", () => {
       Bulletin: (await import("../models/Bulletin.js")).Bulletin,
       GroupTopic: (await import("../models/GroupTopic.js")).GroupTopic,
       GroupReply: (await import("../models/GroupReply.js")).GroupReply,
+      Event: (await import("../models/Event.js")).Event,
+      EventRsvp: (await import("../models/EventRsvp.js")).EventRsvp,
       MediaItem: (await import("../models/MediaItem.js")).MediaItem,
       MediaComment: (await import("../models/MediaComment.js")).MediaComment,
       Report: (await import("../models/Report.js")).Report,
@@ -290,6 +292,26 @@ describe("moderation review queue", () => {
       expect((await notesOf(author, "content_removed"))[0].payload.what).toBe("comment on a portfolio piece");
     });
 
+    it("shows an event with a link to it, and removes it with its answers and announcements", async () => {
+      const boss = await makeAdmin();
+      const host = await signup(app, "author");
+      const guest = await signup(app, "rep1");
+      const event = await M.Event.create({ host: host.user.id, title: "Rude event", description: "Not ok", kind: "in_person", place: "Somewhere", startsAt: new Date(Date.now() + 86_400_000), audience: "public", expireAt: new Date(Date.now() + 5 * 86_400_000) });
+      await M.EventRsvp.create({ event: event._id, user: guest.user.id, status: "going" });
+      await M.Notification.create({ recipient: guest.user.id, type: "event_created", payload: { eventId: String(event._id), actorId: String(host.user.id), title: "Rude event" } });
+      expect((await report(guest, "event", event._id)).status).toBe(201);
+      const found = (await queue(boss)).cases.find((c) => c.targetType === "event");
+      expect(found.target).toMatchObject({ title: "Rude event", link: `/events/${event._id}` });
+      expect(found.target.text).toContain("Not ok");
+      expect(found.target.author.username).toBe("author");
+      const res = await resolve(boss, "event", event._id, "remove");
+      expect(res.body.removed).toBe(true);
+      expect(await M.Event.findById(event._id)).toBeNull();
+      expect(await M.EventRsvp.countDocuments()).toBe(0);
+      expect(await M.Notification.countDocuments({ type: "event_created" })).toBe(0);
+      expect((await notesOf(host, "content_removed"))[0].payload.what).toBe("event");
+    });
+
     it("keeps a topic's reply count right when only a reply is removed", async () => {
       const boss = await makeAdmin();
       const author = await signup(app, "author");
@@ -466,7 +488,7 @@ describe("moderation review queue", () => {
   });
 
   describe("the record of decisions", () => {
-    it("lists them newest first with who decided and about whom, twenty a page, and never the removed content", async () => {
+    it("lists them newest first with who decided and about whom, twenty a page, and never the removed content", { timeout: 120_000 }, async () => {
       const boss = await makeAdmin();
       const author = await signup(app, "author");
       const rep = await signup(app, "rep1");

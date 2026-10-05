@@ -24,6 +24,8 @@ import { Task } from "../models/Task.js";
 import { UsernameHistory } from "../models/UsernameHistory.js";
 import { MediaReaction } from "../models/MediaReaction.js";
 import { MediaComment } from "../models/MediaComment.js";
+import { Event } from "../models/Event.js";
+import { EventRsvp } from "../models/EventRsvp.js";
 import { Message } from "../models/Message.js";
 import { GroupMessage } from "../models/GroupMessage.js";
 import { PasswordReset } from "../models/PasswordReset.js";
@@ -89,6 +91,10 @@ export async function deleteAccount(userId) {
   await MediaComment.deleteMany({ _id: { $in: mediaComments.map((c) => c._id) } });
   await MediaItem.deleteMany({ owner: id });
   await Album.deleteMany({ owner: id });
+  // Events they organised (with every answer to them), and their answers to other people's.
+  const eventIds = (await Event.find({ host: id }).select("_id")).map((e) => e._id);
+  await EventRsvp.deleteMany({ $or: [{ user: id }, { event: { $in: eventIds } }] });
+  await Event.deleteMany({ host: id });
   // Invite links they made, and their name on other people's lists of who came in through a link.
   await Invite.deleteMany({ inviter: id });
   await Invite.updateMany({ "joined.user": id }, { $pull: { joined: { user: id } } });
@@ -128,7 +134,7 @@ export async function deleteAccount(userId) {
   await Notification.deleteMany({ $or: [{ recipient: id }, { "payload.actorId": { $in: [String(id), id] } }] });
 
   // Their reports, and reports about them or their content.
-  const targetIds = [id, ...postIds, ...comments.map((c) => c._id), ...profileComments.map((c) => c._id), ...mediaComments.map((c) => c._id), ...blogIds, ...bulletinIds, ...topicIds, ...replyIds];
+  const targetIds = [id, ...postIds, ...comments.map((c) => c._id), ...profileComments.map((c) => c._id), ...mediaComments.map((c) => c._id), ...eventIds, ...blogIds, ...bulletinIds, ...topicIds, ...replyIds];
   await Report.deleteMany({ $or: [{ reporter: id }, { targetId: { $in: targetIds } }] });
 
   const filesRemoved = await deleteAllStoredAssets(id);

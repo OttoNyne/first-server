@@ -15,6 +15,7 @@ import { friendsRouter } from "./routes/friends.routes.js";
 import { groupsRouter } from "./routes/groups.routes.js";
 import { mediaRouter } from "./routes/media.routes.js";
 import { mediaCommentsRouter } from "./routes/mediaComments.routes.js";
+import { eventsRouter } from "./routes/events.routes.js";
 import { notificationsRouter } from "./routes/notifications.routes.js";
 import { moderationRouter } from "./routes/moderation.routes.js";
 import { aiRouter } from "./routes/ai.routes.js";
@@ -86,6 +87,7 @@ app.use("/api/groups", groupsRouter);
 app.use("/api/groups", groupBoardRouter);
 app.use("/api/media", mediaRouter);
 app.use("/api/media", mediaCommentsRouter);
+app.use("/api/events", eventsRouter);
 // invite previews are public (the person opening the link isn't signed in), so this goes before moderationRouter, which asks for a sign-in on everything under /api
 app.use("/api/invites", invitesRouter);
 // albums can be looked at without signing in, so they go before moderationRouter, which asks for a sign-in on everything under /api
