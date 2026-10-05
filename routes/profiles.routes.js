@@ -20,6 +20,8 @@ import { ProfileView } from "../models/ProfileView.js";
 import { MAX_COMMENT, allowEdit, checkText, cursorFilter } from "../utils/textInput.js";
 import { deleteStoredAssetIfUnused } from "../services/storedAssets.js";
 import { toPublicUser, toPublicTrack, toPublicComment } from "../utils/serialize.js";
+import { checkComment } from "../utils/commentInput.js";
+import { releasePictures } from "../services/commentPictures.js";
 import { escapeRegex } from "../utils/regex.js";
 
 export const profilesRouter = Router();
@@ -248,6 +250,7 @@ profilesRouter.delete("/comments/:commentId", requireAuth, async (req, res) => {
   const isOwner = String(comment.profileOwner) === req.user.id;
   if (!isAuthor && !isOwner) return res.status(403).json({ error: "Not allowed" });
   await comment.deleteOne();
+  await releasePictures([comment]);
   res.status(204).end();
 });
 
@@ -292,13 +295,16 @@ profilesRouter.patch("/comments/:commentId", requireAuth, async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.commentId)) return res.status(404).json({ error: "Comment not found" });
   const comment = await ProfileComment.findById(req.params.commentId);
   if (!comment || String(comment.author) !== req.user.id) return res.status(404).json({ error: "Comment not found" });
-  const text = checkText(req.body?.content, MAX_COMMENT, "Testimonials");
+  const text = await checkComment(req.body, { userId: req.user.id, max: MAX_COMMENT, label: "Testimonials", current: comment });
   if (text.error) return res.status(400).json({ error: text.error });
   if (!(await allowEdit(req, res))) return;
-  if (text.value !== comment.content) {
-    comment.content = text.value;
+  const takenOff = text.value.imageUrl === null && comment.imageUrl ? comment.imageUrl : null;
+  if ((text.value.content !== undefined && text.value.content !== comment.content) || takenOff) {
+    if (text.value.content !== undefined) comment.content = text.value.content;
+    if (takenOff) comment.imageUrl = null;
     comment.editedAt = new Date();
     await comment.save();
+    if (takenOff) await releasePictures([{ author: comment.author, imageUrl: takenOff }]);
   }
   await comment.populate("author");
   res.json({ comment: await toPublicComment(comment, req.user.id) });
@@ -311,7 +317,7 @@ profilesRouter.post("/:username/comments", requireAuth, async (req, res) => {
   } catch (err) {
     return res.status(err.status || 500).json({ error: err.message });
   }
-  const text = checkText(req.body?.content, MAX_COMMENT, "Testimonials");
+  const text = await checkComment(req.body, { userId: req.user.id, max: MAX_COMMENT, label: "Testimonials" });
   if (text.error) return res.status(400).json({ error: text.error });
   if (!(await guestbookLimiter.allow(req.user.id))) {
     res.set("Retry-After", String(guestbookLimiter.windowSeconds));
@@ -320,7 +326,8 @@ profilesRouter.post("/:username/comments", requireAuth, async (req, res) => {
   let comment = await ProfileComment.create({
     profileOwner: owner._id,
     author: req.user.id,
-    content: text.value,
+    content: text.value.content,
+    imageUrl: text.value.imageUrl ?? null,
   });
   comment = await comment.populate("author");
   if (String(owner._id) !== req.user.id) {

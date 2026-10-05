@@ -7,7 +7,9 @@ import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { toPublicComment } from "../utils/serialize.js";
 import { assertVisible } from "../utils/visibility.js";
 import mongoose from "mongoose";
-import { MAX_COMMENT, allowEdit, checkText, cursorFilter } from "../utils/textInput.js";
+import { MAX_COMMENT, allowEdit, cursorFilter } from "../utils/textInput.js";
+import { checkComment } from "../utils/commentInput.js";
+import { releasePictures } from "../services/commentPictures.js";
 import { createLimiter } from "../utils/rateLimit.js";
 
 const PAGE = 20;
@@ -43,7 +45,7 @@ commentsRouter.post("/posts/:postId/comments", requireAuth, async (req, res) => 
     return res.status(err.status || 500).json({ error: err.message });
   }
 
-  const text = checkText(req.body?.content, MAX_COMMENT, "Comments");
+  const text = await checkComment(req.body, { userId: req.user.id, max: MAX_COMMENT, label: "Comments" });
   if (text.error) return res.status(400).json({ error: text.error });
   if (!(await commentLimiter.allow(req.user.id))) {
     res.set("Retry-After", String(commentLimiter.windowSeconds));
@@ -52,7 +54,8 @@ commentsRouter.post("/posts/:postId/comments", requireAuth, async (req, res) => 
   let comment = await Comment.create({
     post: post._id,
     author: req.user.id,
-    content: text.value,
+    content: text.value.content,
+    imageUrl: text.value.imageUrl ?? null,
   });
   comment = await comment.populate("author");
 
@@ -73,13 +76,16 @@ commentsRouter.patch("/comments/:id", requireAuth, async (req, res) => {
   const comment = await Comment.findById(req.params.id);
   if (!comment) return res.status(404).json({ error: "Comment not found" });
   if (String(comment.author) !== req.user.id) return res.status(403).json({ error: "Not allowed" });
-  const text = checkText(req.body?.content, MAX_COMMENT, "Comments");
+  const text = await checkComment(req.body, { userId: req.user.id, max: MAX_COMMENT, label: "Comments", current: comment });
   if (text.error) return res.status(400).json({ error: text.error });
   if (!(await allowEdit(req, res))) return;
-  if (text.value !== comment.content) {
-    comment.content = text.value;
+  const takenOff = text.value.imageUrl === null && comment.imageUrl ? comment.imageUrl : null;
+  if ((text.value.content !== undefined && text.value.content !== comment.content) || takenOff) {
+    if (text.value.content !== undefined) comment.content = text.value.content;
+    if (takenOff) comment.imageUrl = null;
     comment.editedAt = new Date();
     await comment.save();
+    if (takenOff) await releasePictures([{ author: comment.author, imageUrl: takenOff }]);
   }
   await comment.populate("author");
   res.json({ comment: await toPublicComment(comment, req.user.id) });
@@ -95,5 +101,6 @@ commentsRouter.delete("/comments/:id", requireAuth, async (req, res) => {
   const isPostAuthor = comment.post ? String(comment.post.author) === req.user.id : false;
   if (!isAuthor && !isPostAuthor) return res.status(403).json({ error: "Not allowed" });
   await comment.deleteOne();
+  await releasePictures([comment]);
   res.status(204).end();
 });

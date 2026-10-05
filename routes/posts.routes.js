@@ -3,6 +3,7 @@ import { Post } from "../models/Post.js";
 import { Comment } from "../models/Comment.js";
 import { Friendship } from "../models/Friendship.js";
 import { requireAuth } from "../middleware/auth.js";
+import { releasePictures } from "../services/commentPictures.js";
 import { toPublicPost } from "../utils/serialize.js";
 import { assertVisible, getProfileForViewer } from "../utils/visibility.js";
 import mongoose from "mongoose";
@@ -142,7 +143,9 @@ postsRouter.delete("/:id", async (req, res) => {
   const post = await Post.findById(req.params.id);
   if (!post) return res.status(404).json({ error: "Post not found" });
   if (String(post.author) !== req.user.id) return res.status(403).json({ error: "Not allowed" });
+  const withPictures = await Comment.find({ post: post._id, imageUrl: { $ne: null } });
   await Comment.deleteMany({ post: post._id });
+  await releasePictures(withPictures);
   await post.deleteOne();
   // An AI-generated image that only this post used would otherwise sit on
   // Cloudinary forever.

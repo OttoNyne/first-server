@@ -16,6 +16,7 @@ import { ModerationAction } from "../models/ModerationAction.js";
 import { User } from "../models/User.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { deleteStoredAssetIfUnused } from "./storedAssets.js";
+import { releasePictures } from "./commentPictures.js";
 import { isAdminUser } from "../utils/admin.js";
 import { ABOUT_FIELDS } from "../utils/about.js";
 
@@ -46,11 +47,11 @@ export async function loadTarget(type, id, viewerId) {
     }
     case "comment": {
       const c = await Comment.findById(id).populate("author");
-      return c ? shape(c.author, { text: clip(c.content), link: `/posts/${c.post}`, edited: Boolean(c.editedAt) }) : { exists: false, authorId: null };
+      return c ? shape(c.author, { text: clip(c.content), image: c.imageUrl ?? null, link: `/posts/${c.post}`, edited: Boolean(c.editedAt) }) : { exists: false, authorId: null };
     }
     case "profileComment": {
       const c = await ProfileComment.findById(id).populate("author").populate("profileOwner");
-      return c ? shape(c.author, { text: clip(c.content), link: c.profileOwner ? `/u/${c.profileOwner.username}` : null, edited: Boolean(c.editedAt) }) : { exists: false, authorId: null };
+      return c ? shape(c.author, { text: clip(c.content), image: c.imageUrl ?? null, link: c.profileOwner ? `/u/${c.profileOwner.username}` : null, edited: Boolean(c.editedAt) }) : { exists: false, authorId: null };
     }
     case "event": {
       const e = await Event.findById(id).populate("host");
@@ -59,7 +60,7 @@ export async function loadTarget(type, id, viewerId) {
     case "mediaComment": {
       const c = await MediaComment.findById(id).populate("author").populate({ path: "item", populate: { path: "owner" } });
       const owner = c?.item?.owner;
-      return c ? shape(c.author, { text: clip(c.content), link: owner ? `/u/${owner.username}?piece=${c.item._id}&comment=${c._id}#portfolio` : null, edited: Boolean(c.editedAt) }) : { exists: false, authorId: null };
+      return c ? shape(c.author, { text: clip(c.content), image: c.imageUrl ?? null, link: owner ? `/u/${owner.username}?piece=${c.item._id}&comment=${c._id}#portfolio` : null, edited: Boolean(c.editedAt) }) : { exists: false, authorId: null };
     }
     case "blogEntry": {
       const b = await BlogEntry.findById(id).populate("author");
@@ -87,17 +88,21 @@ export async function removeContent(type, id) {
     case "post": {
       const post = await Post.findById(id);
       if (!post) return false;
+      const withPictures = await Comment.find({ post: post._id, imageUrl: { $ne: null } });
       await Comment.deleteMany({ post: post._id });
+      await releasePictures(withPictures);
       await post.deleteOne();
       if (post.imageUrl) await deleteStoredAssetIfUnused({ ownerId: post.author, url: post.imageUrl });
       return true;
     }
     case "comment":
-      return (await Comment.findByIdAndDelete(id)) !== null;
     case "profileComment":
-      return (await ProfileComment.findByIdAndDelete(id)) !== null;
-    case "mediaComment":
-      return (await MediaComment.findByIdAndDelete(id)) !== null;
+    case "mediaComment": {
+      const Model = type === "comment" ? Comment : type === "profileComment" ? ProfileComment : MediaComment;
+      const removed = await Model.findByIdAndDelete(id);
+      if (removed) await releasePictures([removed]);
+      return removed !== null;
+    }
     case "event": {
       const event = await Event.findByIdAndDelete(id);
       if (event) {

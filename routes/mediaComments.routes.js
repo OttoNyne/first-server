@@ -7,7 +7,9 @@ import { User } from "../models/User.js";
 import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { toPublicComment } from "../utils/serialize.js";
 import { assertVisible, blockedUserIds } from "../utils/visibility.js";
-import { MAX_COMMENT, allowEdit, checkText, cursorFilter } from "../utils/textInput.js";
+import { MAX_COMMENT, allowEdit, cursorFilter } from "../utils/textInput.js";
+import { checkComment } from "../utils/commentInput.js";
+import { releasePictures } from "../services/commentPictures.js";
 import { createLimiter } from "../utils/rateLimit.js";
 
 // Comments on portfolio pieces, mounted at /api/media. Who may read or write them is whoever may see the piece (its owner's
@@ -50,14 +52,14 @@ mediaCommentsRouter.post("/:id/comments", requireAuth, async (req, res) => {
   const piece = await visiblePiece(req.params.id, req.user.id);
   if (!piece) return res.status(404).json({ error: "Media item not found" });
 
-  const text = checkText(req.body?.content, MAX_COMMENT, "Comments");
+  const text = await checkComment(req.body, { userId: req.user.id, max: MAX_COMMENT, label: "Comments" });
   if (text.error) return res.status(400).json({ error: text.error });
   if (!(await commentLimiter.allow(req.user.id))) {
     res.set("Retry-After", String(commentLimiter.windowSeconds));
     return res.status(429).json({ error: "You're commenting too fast — try again in a few minutes." });
   }
 
-  let comment = await MediaComment.create({ item: piece.item._id, author: req.user.id, content: text.value });
+  let comment = await MediaComment.create({ item: piece.item._id, author: req.user.id, content: text.value.content, imageUrl: text.value.imageUrl ?? null });
   comment = await comment.populate("author");
 
   if (String(piece.owner._id) !== req.user.id) {
@@ -75,13 +77,16 @@ mediaCommentsRouter.patch("/comments/:commentId", requireAuth, async (req, res) 
   if (!mongoose.isValidObjectId(req.params.commentId)) return res.status(404).json({ error: "Comment not found" });
   const comment = await MediaComment.findById(req.params.commentId);
   if (!comment || String(comment.author) !== req.user.id) return res.status(404).json({ error: "Comment not found" });
-  const text = checkText(req.body?.content, MAX_COMMENT, "Comments");
+  const text = await checkComment(req.body, { userId: req.user.id, max: MAX_COMMENT, label: "Comments", current: comment });
   if (text.error) return res.status(400).json({ error: text.error });
   if (!(await allowEdit(req, res))) return;
-  if (text.value !== comment.content) {
-    comment.content = text.value;
+  const takenOff = text.value.imageUrl === null && comment.imageUrl ? comment.imageUrl : null;
+  if ((text.value.content !== undefined && text.value.content !== comment.content) || takenOff) {
+    if (text.value.content !== undefined) comment.content = text.value.content;
+    if (takenOff) comment.imageUrl = null;
     comment.editedAt = new Date();
     await comment.save();
+    if (takenOff) await releasePictures([{ author: comment.author, imageUrl: takenOff }]);
   }
   await comment.populate("author");
   res.json({ comment: await toPublicComment(comment, req.user.id) });
@@ -97,5 +102,6 @@ mediaCommentsRouter.delete("/comments/:commentId", requireAuth, async (req, res)
   const isOwner = item ? String(item.owner) === req.user.id : false;
   if (!isAuthor && !isOwner) return res.status(404).json({ error: "Comment not found" });
   await comment.deleteOne();
+  await releasePictures([comment]);
   res.status(204).end();
 });

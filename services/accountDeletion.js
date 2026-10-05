@@ -25,6 +25,7 @@ import { Task } from "../models/Task.js";
 import { UsernameHistory } from "../models/UsernameHistory.js";
 import { MediaReaction } from "../models/MediaReaction.js";
 import { MediaComment } from "../models/MediaComment.js";
+import { releasePictures } from "./commentPictures.js";
 import { Event } from "../models/Event.js";
 import { EventRsvp } from "../models/EventRsvp.js";
 import { Message } from "../models/Message.js";
@@ -68,11 +69,13 @@ export async function deleteAccount(userId) {
 
   const posts = await Post.find({ author: id }).select("_id");
   const postIds = posts.map((p) => p._id);
-  const comments = await Comment.find({ $or: [{ author: id }, { post: { $in: postIds } }] }).select("_id");
-  const profileComments = await ProfileComment.find({ $or: [{ profileOwner: id }, { author: id }] }).select("_id");
+  const comments = await Comment.find({ $or: [{ author: id }, { post: { $in: postIds } }] }).select("_id author imageUrl");
+  const profileComments = await ProfileComment.find({ $or: [{ profileOwner: id }, { author: id }] }).select("_id author imageUrl");
 
   await Comment.deleteMany({ _id: { $in: comments.map((c) => c._id) } });
   await ProfileComment.deleteMany({ _id: { $in: profileComments.map((c) => c._id) } });
+  // pictures other people put in comments that go with this account were their files: let them go too (this account's own go with its ledger below)
+  await releasePictures([...comments, ...profileComments].filter((c) => String(c.author) !== String(id)));
   await Post.deleteMany({ author: id });
   const blogIds = (await BlogEntry.find({ author: id }).select("_id")).map((e) => e._id);
   await BlogEntry.deleteMany({ author: id });
@@ -88,8 +91,9 @@ export async function deleteAccount(userId) {
   const mediaIds = (await MediaItem.find({ owner: id }).select("_id")).map((m) => m._id);
   await MediaReaction.deleteMany({ $or: [{ user: id }, { item: { $in: mediaIds } }] });
   // Comments they left on others' pieces, and everyone's comments on theirs.
-  const mediaComments = await MediaComment.find({ $or: [{ author: id }, { item: { $in: mediaIds } }] }).select("_id");
+  const mediaComments = await MediaComment.find({ $or: [{ author: id }, { item: { $in: mediaIds } }] }).select("_id author imageUrl");
   await MediaComment.deleteMany({ _id: { $in: mediaComments.map((c) => c._id) } });
+  await releasePictures(mediaComments.filter((c) => String(c.author) !== String(id)));
   await MediaItem.deleteMany({ owner: id });
   await Album.deleteMany({ owner: id });
   // Events they organised (with every answer to them), and their answers to other people's.

@@ -9,11 +9,13 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const ALLOWED_PURPOSES = ["avatars", "wallpapers", "portfolio", "tracks"];
+const ALLOWED_PURPOSES = ["avatars", "wallpapers", "portfolio", "tracks", "comments"];
 
 const IMAGE_MIME = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 const PURPOSE_MIME = {
   avatars: IMAGE_MIME,
+  // A picture (or GIF) to put in a comment: stored here like any other upload, never linked from somewhere else.
+  comments: IMAGE_MIME,
   wallpapers: [...IMAGE_MIME, "video/mp4", "video/webm"],
   // Portfolio videos: the 30-second limit is enforced after upload (the
   // duration is only known once Cloudinary has the file) — see routes/media.

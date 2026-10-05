@@ -10,8 +10,10 @@ import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { upload } from "../middleware/upload.js";
 import { recordStoredAsset, deleteStoredAssetIfUnused } from "../services/storedAssets.js";
 import { toPublicMediaItem } from "../utils/serialize.js";
+import { releasePictures } from "../services/commentPictures.js";
 import { assertVisible, getProfileForViewer } from "../utils/visibility.js";
 import { createLimiter } from "../utils/rateLimit.js";
+import { MAX_COMMENT_PICTURE_BYTES, commentPictureLimiter } from "../utils/commentPictures.js";
 import { MAX_VIDEO_SECONDS, parseStartSeconds, parseVideoLink } from "../utils/videoLinks.js";
 
 export const mediaRouter = Router();
@@ -28,7 +30,18 @@ mediaRouter.post("/upload", requireAuth, upload.single("file"), async (req, res)
   const purpose = req.query.purpose || "portfolio";
   const url = req.file.path;
   const isVideo = req.file.mimetype.startsWith("video/");
-  const isPortfolio = purpose === "portfolio" || !["avatars", "wallpapers", "tracks"].includes(purpose);
+  const isPortfolio = purpose === "portfolio" || !["avatars", "wallpapers", "tracks", "comments"].includes(purpose);
+
+  // A picture for a comment is smaller than a portfolio piece and limited per person; the file is already stored, so take it out again.
+  if (purpose === "comments") {
+    const tooBig = Number(req.file.size) > MAX_COMMENT_PICTURE_BYTES;
+    const tooMany = !tooBig && !(await commentPictureLimiter.allow(req.user.id));
+    if (tooBig || tooMany) {
+      await cloudinary.uploader.destroy(req.file.filename, { resource_type: "image", invalidate: true }).catch(() => {});
+      if (tooMany) res.set("Retry-After", String(commentPictureLimiter.windowSeconds));
+      return res.status(tooBig ? 413 : 429).json({ error: tooBig ? "Pictures in comments can be up to 5 MB." : "You've added a lot of pictures to comments — try again in a while." });
+    }
+  }
 
   // A full portfolio can't take another piece; the file was already stored, so take it out again.
   if (isPortfolio && (await MediaItem.countDocuments({ owner: req.user.id })) >= MAX_PORTFOLIO) {
@@ -220,7 +233,9 @@ mediaRouter.delete("/:id", requireAuth, async (req, res) => {
   if (String(item.owner) !== req.user.id) return res.status(403).json({ error: "Not allowed" });
   await item.deleteOne();
   await MediaReaction.deleteMany({ item: item._id });
+  const withPictures = await MediaComment.find({ item: item._id, imageUrl: { $ne: null } });
   await MediaComment.deleteMany({ item: item._id });
+  await releasePictures(withPictures);
   await deleteStoredAssetIfUnused({ ownerId: item.owner, url: item.url });
   res.status(204).end();
 });
