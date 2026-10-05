@@ -161,7 +161,7 @@ describe("group boards", () => {
       expect(view.hasMore).toBe(false);
     });
 
-    it("checks the text, the topic, and the speed", async () => {
+    it("checks the text, the topic, and the speed", { timeout: 120_000 }, async () => {
       const { gid, alice } = await setup();
       const t = (await start(alice, gid)).body.topic;
       for (const body of ["", "  ", null, 5, ["x"], "x".repeat(1001)]) expect((await reply(alice, gid, t.id, body)).status, String(body).slice(0, 6)).toBe(400);

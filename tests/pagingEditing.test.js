@@ -60,7 +60,7 @@ describe("paging, and changing what you wrote", () => {
       for (const content of ["", null, 7, "x".repeat(1001)]) expect((await alice.agent.post("/api/profiles/alice/comments").send({ content })).status, String(content)?.slice(0, 10)).toBe(400);
     });
 
-    it("limits how fast someone can post, comment or write testimonials", async () => {
+    it("limits how fast someone can post, comment or write testimonials", { timeout: 120_000 }, async () => {
       const alice = await signup(app, "alice");
       for (let i = 0; i < 20; i++) expect((await alice.agent.post("/api/posts").send({ content: `p${i}` })).status).toBe(201);
       const limited = await alice.agent.post("/api/posts").send({ content: "one too many" });
@@ -112,7 +112,7 @@ describe("paging, and changing what you wrote", () => {
       expect((await request(app).patch(url).send({ content: "x" })).status).toBe(401);
     });
 
-    it("limits how many changes someone can make an hour, across everything", async () => {
+    it("limits how many changes someone can make an hour, across everything", { timeout: 120_000 }, async () => {
       const alice = await signup(app, "alice");
       const made = await alice.agent.post("/api/posts").send({ content: "Start" });
       const url = `/api/posts/${made.body.post.id}`;

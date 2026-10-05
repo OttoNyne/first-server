@@ -25,6 +25,8 @@ describe("moderation review queue", () => {
       Bulletin: (await import("../models/Bulletin.js")).Bulletin,
       GroupTopic: (await import("../models/GroupTopic.js")).GroupTopic,
       GroupReply: (await import("../models/GroupReply.js")).GroupReply,
+      MediaItem: (await import("../models/MediaItem.js")).MediaItem,
+      MediaComment: (await import("../models/MediaComment.js")).MediaComment,
       Report: (await import("../models/Report.js")).Report,
       Notification: (await import("../models/Notification.js")).Notification,
       ModerationAction: (await import("../models/ModerationAction.js")).ModerationAction,
@@ -268,6 +270,24 @@ describe("moderation review queue", () => {
       expect((await notesOf(rep, "report_resolved")).every((n) => n.payload.outcome === "action_taken")).toBe(true);
       expect((await notesOf(rep, "report_resolved")).length).toBe(7);
       expect((await M.User.findById(author.user.id)).suspendedAt).toBeNull();
+    });
+
+    it("shows a comment on a portfolio piece with a link to it, and removes it like any other comment", async () => {
+      const boss = await makeAdmin();
+      const owner = await signup(app, "owner");
+      const author = await signup(app, "author");
+      const rep = await signup(app, "rep1");
+      const item = await M.MediaItem.create({ owner: owner.user.id, url: "https://images.example.com/p.jpg", type: "image" });
+      const bad = await M.MediaComment.create({ item: item._id, author: author.user.id, content: "a rude comment" });
+      expect((await report(rep, "mediaComment", bad._id)).status).toBe(201);
+      const found = (await queue(boss)).cases.find((c) => c.targetType === "mediaComment");
+      expect(found.target.text).toBe("a rude comment");
+      expect(found.target.author.username).toBe("author");
+      expect(found.target.link).toBe(`/u/owner?piece=${item._id}&comment=${bad._id}#portfolio`);
+      const res = await resolve(boss, "mediaComment", bad._id, "remove");
+      expect(res.body.removed).toBe(true);
+      expect(await M.MediaComment.findById(bad._id)).toBeNull();
+      expect((await notesOf(author, "content_removed"))[0].payload.what).toBe("comment on a portfolio piece");
     });
 
     it("keeps a topic's reply count right when only a reply is removed", async () => {

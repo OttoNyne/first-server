@@ -16,6 +16,7 @@ export async function toPublicUser(user, viewerId) {
   return isFriend ? user.toPublic() : user.toPublicRestricted();
 }
 
+// reactions: { likes, dislikes, myReaction, commentCount }
 export function toPublicMediaItem(item, reactions = {}) {
   return {
     id: item._id,
@@ -30,6 +31,7 @@ export function toPublicMediaItem(item, reactions = {}) {
     likes: reactions.likes ?? 0,
     dislikes: reactions.dislikes ?? 0,
     myReaction: reactions.myReaction ?? 0,
+    commentCount: reactions.commentCount ?? 0,
     createdAt: item.createdAt,
   };
 }

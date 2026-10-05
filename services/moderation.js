@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { Post } from "../models/Post.js";
 import { Comment } from "../models/Comment.js";
 import { ProfileComment } from "../models/ProfileComment.js";
+import { MediaComment } from "../models/MediaComment.js";
 import { BlogEntry } from "../models/BlogEntry.js";
 import { Bulletin } from "../models/Bulletin.js";
 import { GroupTopic } from "../models/GroupTopic.js";
@@ -14,7 +15,7 @@ import { toPublicUser } from "../utils/serialize.js";
 import { deleteStoredAssetIfUnused } from "./storedAssets.js";
 import { isAdminUser } from "../utils/admin.js";
 
-export const CONTENT_TYPES = ["post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply"];
+export const CONTENT_TYPES = ["post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment"];
 export const REPORT_TYPES = ["user", ...CONTENT_TYPES];
 const PREVIEW_CHARS = 600;
 const clip = (text) => (typeof text === "string" && text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS)}…` : (text ?? ""));
@@ -46,6 +47,11 @@ export async function loadTarget(type, id, viewerId) {
     case "profileComment": {
       const c = await ProfileComment.findById(id).populate("author").populate("profileOwner");
       return c ? shape(c.author, { text: clip(c.content), link: c.profileOwner ? `/u/${c.profileOwner.username}` : null, edited: Boolean(c.editedAt) }) : { exists: false, authorId: null };
+    }
+    case "mediaComment": {
+      const c = await MediaComment.findById(id).populate("author").populate({ path: "item", populate: { path: "owner" } });
+      const owner = c?.item?.owner;
+      return c ? shape(c.author, { text: clip(c.content), link: owner ? `/u/${owner.username}?piece=${c.item._id}&comment=${c._id}#portfolio` : null, edited: Boolean(c.editedAt) }) : { exists: false, authorId: null };
     }
     case "blogEntry": {
       const b = await BlogEntry.findById(id).populate("author");
@@ -82,6 +88,8 @@ export async function removeContent(type, id) {
       return (await Comment.findByIdAndDelete(id)) !== null;
     case "profileComment":
       return (await ProfileComment.findByIdAndDelete(id)) !== null;
+    case "mediaComment":
+      return (await MediaComment.findByIdAndDelete(id)) !== null;
     case "blogEntry": {
       const entry = await BlogEntry.findByIdAndDelete(id);
       if (entry) await Notification.deleteMany({ type: "blog_post", "payload.entryId": String(entry._id) });
@@ -103,7 +111,7 @@ export async function removeContent(type, id) {
   return false;
 }
 
-const WHAT = { post: "post", comment: "comment", profileComment: "testimonial", blogEntry: "blog entry", bulletin: "bulletin", groupTopic: "group topic", groupReply: "group reply" };
+const WHAT = { post: "post", comment: "comment", profileComment: "testimonial", mediaComment: "comment on a portfolio piece", blogEntry: "blog entry", bulletin: "bulletin", groupTopic: "group topic", groupReply: "group reply" };
 
 export async function suspendUser(userId, note) {
   await User.updateOne({ _id: userId }, { $set: { suspendedAt: new Date(), suspensionNote: note ?? "" } });

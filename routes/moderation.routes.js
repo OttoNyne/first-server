@@ -45,7 +45,7 @@ moderationRouter.delete("/users/:username/block", async (req, res) => {
   res.status(204).end();
 });
 
-const REPORT_TARGET_TYPES = ["user", "post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply"];
+const REPORT_TARGET_TYPES = ["user", "post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment"];
 
 const reportLimiter = createLimiter({ name: "report", limit: 30, windowMs: 60 * 60 * 1000 });
 

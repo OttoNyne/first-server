@@ -23,6 +23,7 @@ import { Report } from "../models/Report.js";
 import { Task } from "../models/Task.js";
 import { UsernameHistory } from "../models/UsernameHistory.js";
 import { MediaReaction } from "../models/MediaReaction.js";
+import { MediaComment } from "../models/MediaComment.js";
 import { Message } from "../models/Message.js";
 import { GroupMessage } from "../models/GroupMessage.js";
 import { PasswordReset } from "../models/PasswordReset.js";
@@ -83,6 +84,9 @@ export async function deleteAccount(userId) {
   // Reactions on their pictures, and reactions they left on others'.
   const mediaIds = (await MediaItem.find({ owner: id }).select("_id")).map((m) => m._id);
   await MediaReaction.deleteMany({ $or: [{ user: id }, { item: { $in: mediaIds } }] });
+  // Comments they left on others' pieces, and everyone's comments on theirs.
+  const mediaComments = await MediaComment.find({ $or: [{ author: id }, { item: { $in: mediaIds } }] }).select("_id");
+  await MediaComment.deleteMany({ _id: { $in: mediaComments.map((c) => c._id) } });
   await MediaItem.deleteMany({ owner: id });
   await Album.deleteMany({ owner: id });
   // Invite links they made, and their name on other people's lists of who came in through a link.
@@ -124,7 +128,7 @@ export async function deleteAccount(userId) {
   await Notification.deleteMany({ $or: [{ recipient: id }, { "payload.actorId": { $in: [String(id), id] } }] });
 
   // Their reports, and reports about them or their content.
-  const targetIds = [id, ...postIds, ...comments.map((c) => c._id), ...profileComments.map((c) => c._id), ...blogIds, ...bulletinIds, ...topicIds, ...replyIds];
+  const targetIds = [id, ...postIds, ...comments.map((c) => c._id), ...profileComments.map((c) => c._id), ...mediaComments.map((c) => c._id), ...blogIds, ...bulletinIds, ...topicIds, ...replyIds];
   await Report.deleteMany({ $or: [{ reporter: id }, { targetId: { $in: targetIds } }] });
 
   const filesRemoved = await deleteAllStoredAssets(id);

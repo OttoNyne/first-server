@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { v2 as cloudinary } from "cloudinary";
 import { MediaItem } from "../models/MediaItem.js";
 import { MediaReaction } from "../models/MediaReaction.js";
+import { MediaComment } from "../models/MediaComment.js";
 import { Album } from "../models/Album.js";
 import { User } from "../models/User.js";
 import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
@@ -149,9 +150,11 @@ mediaRouter.get("/user/:username", attachUserIfPresent, async (req, res) => {
   try {
     const user = await getProfileForViewer(req.params.username, req.user?.id);
     const items = await MediaItem.find({ owner: user._id }).sort("-createdAt");
-    const summary = await reactionSummary(items.map((i) => i._id), req.user?.id);
+    const ids = items.map((i) => i._id);
+    const summary = await reactionSummary(ids, req.user?.id);
+    const counts = new Map((await MediaComment.aggregate([{ $match: { item: { $in: ids } } }, { $group: { _id: "$item", n: { $sum: 1 } } }])).map((c) => [String(c._id), c.n]));
     res.json({
-      media: items.map((item) => toPublicMediaItem(item, summary.get(String(item._id)))),
+      media: items.map((item) => toPublicMediaItem(item, { ...summary.get(String(item._id)), commentCount: counts.get(String(item._id)) ?? 0 })),
     });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -217,6 +220,7 @@ mediaRouter.delete("/:id", requireAuth, async (req, res) => {
   if (String(item.owner) !== req.user.id) return res.status(403).json({ error: "Not allowed" });
   await item.deleteOne();
   await MediaReaction.deleteMany({ item: item._id });
+  await MediaComment.deleteMany({ item: item._id });
   await deleteStoredAssetIfUnused({ ownerId: item.owner, url: item.url });
   res.status(204).end();
 });
