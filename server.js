@@ -16,6 +16,7 @@ const { describeMail } = await import("./utils/mailer.js");
 const { startReminderTimer } = await import("./services/scheduledLives.js");
 const { startEventReminderTimer } = await import("./services/events.js");
 const { startBirthdayTimer } = await import("./services/birthdays.js");
+const { startCsVerifiedTimer } = await import("./services/csVerified.js");
 
 const PORT = process.env.PORT || 5000;
 
@@ -25,4 +26,5 @@ app.listen(PORT, () => {
   startReminderTimer(); // "your live starts soon" reminders
   startEventReminderTimer(); // "your event starts soon" reminders
   startBirthdayTimer(); // "it's their birthday" notes to friends
+  startCsVerifiedTimer(); // the CSverified badge, earned with 1,000 active friends
 });

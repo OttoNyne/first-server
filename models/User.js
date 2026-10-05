@@ -53,6 +53,12 @@ const userSchema = new mongoose.Schema(
     // Whether they may be used to connect people: named as a mutual friend, suggested to friends of their friends, and their friends
     // suggested through them (see utils/friendGraph.js). On by default; switching it off keeps who they know to themselves.
     showConnections: { type: Boolean, default: true },
+    // The CSverified badge, in two independent parts: given by an administrator, or earned by having 1,000 active friends (see
+    // services/csVerified.js). Neither can be set from a request by the person themselves.
+    csVerifiedByAdmin: { type: Boolean, default: false },
+    csVerifiedAdminAt: { type: Date, default: null },
+    csVerifiedEarned: { type: Boolean, default: false },
+    csVerifiedEarnedAt: { type: Date, default: null },
     // Opt-in profile views (default off): they may see who visits their profile, and visitors they look at may see them (see routes/profileViews.routes.js).
     profileViews: { type: Boolean, default: false },
     // Sessions (JWTs) issued before this moment are rejected — set when the
@@ -103,6 +109,7 @@ userSchema.methods.toPublic = function ({ includeEmail = false } = {}) {
     mood: this.mood ?? "",
     listeningTo: this.listeningTo ?? "",
     tags: this.tags ?? [],
+    csVerified: Boolean(this.csVerifiedByAdmin || this.csVerifiedEarned),
     sectionOrder: completeOrder(this.sectionOrder),
     hiddenSections: cleanHidden(this.hiddenSections),
     isPrivate: this.isPrivate,
@@ -120,12 +127,15 @@ userSchema.methods.toPublicRestricted = function () {
     username: this.username,
     displayName: this.displayName,
     avatarUrl: this.avatarUrl,
+    csVerified: Boolean(this.csVerifiedByAdmin || this.csVerifiedEarned),
     isPrivate: this.isPrivate,
     createdAt: this.createdAt,
   };
 };
 
 userSchema.index({ tags: 1 });
+// The people an administrator has given the badge to.
+userSchema.index({ csVerifiedAdminAt: -1 }, { sparse: true });
 // Finding the birthdays that fall on a day.
 userSchema.index({ "birthday.month": 1, "birthday.day": 1 }, { sparse: true });
 

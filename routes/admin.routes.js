@@ -7,6 +7,7 @@ import { requireAdmin } from "../middleware/requireAdmin.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { cleanBody } from "../utils/blogText.js";
 import { REPORT_TYPES, liftSuspension, loadTarget, resolveCase } from "../services/moderation.js";
+import { giveByAdmin, removeByAdmin } from "../services/csVerified.js";
 
 // The moderation review queue. Everything here is for administrators only (see middleware/requireAdmin.js) and answers 404 to anyone else.
 export const adminRouter = Router();
@@ -87,6 +88,37 @@ adminRouter.get("/suspended", async (req, res) => {
     page: p,
     hasMore: found.length > PAGE,
   });
+});
+
+// The CSverified badge: who an administrator has given it to, giving it, and taking it away. A badge someone earned with friends is
+// separate (see services/csVerified.js) and isn't touched here. Each change is kept in the moderation record.
+adminRouter.get("/verified", async (req, res) => {
+  const p = page(req);
+  const found = await User.find({ csVerifiedByAdmin: true }).sort({ csVerifiedAdminAt: -1, _id: -1 }).skip((p - 1) * PAGE).limit(PAGE + 1);
+  res.json({
+    users: await Promise.all(found.slice(0, PAGE).map(async (u) => ({ user: await toPublicUser(u, req.user.id), givenAt: u.csVerifiedAdminAt }))),
+    page: p,
+    hasMore: found.length > PAGE,
+  });
+});
+
+const findForBadge = (username) => User.findOne({ username: String(username).trim().toLowerCase().replace(/^@/, "") });
+
+adminRouter.put("/verified/:username", async (req, res) => {
+  const user = await findForBadge(req.params.username);
+  if (!user) return res.status(404).json({ error: "No one has that username" });
+  if (user.suspendedAt) return res.status(400).json({ error: "That account is suspended" });
+  const given = await giveByAdmin(user);
+  if (given) await ModerationAction.create({ admin: req.user.id, targetType: "user", targetId: user._id, subject: user._id, action: "verified", note: "", reportCount: 0 });
+  res.json({ user: await toPublicUser(user, req.user.id), given });
+});
+
+adminRouter.delete("/verified/:username", async (req, res) => {
+  const user = await findForBadge(req.params.username);
+  if (!user) return res.status(404).json({ error: "No one has that username" });
+  if (!(await removeByAdmin(user))) return res.status(404).json({ error: "That person doesn't have a badge from an administrator" });
+  await ModerationAction.create({ admin: req.user.id, targetType: "user", targetId: user._id, subject: user._id, action: "unverified", note: "", reportCount: 0 });
+  res.status(204).end();
 });
 
 adminRouter.post("/users/:id/unsuspend", async (req, res) => {

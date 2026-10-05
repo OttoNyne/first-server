@@ -11,7 +11,7 @@ const moderationActionSchema = new mongoose.Schema(
     targetId: { type: ObjectId, required: true },
     // The author of the content, or the account itself for a user report.
     subject: { type: ObjectId, ref: "User", default: null },
-    action: { type: String, enum: ["dismissed", "removed", "suspended", "removed_and_suspended", "unsuspended"], required: true },
+    action: { type: String, enum: ["dismissed", "removed", "suspended", "removed_and_suspended", "unsuspended", "verified", "unverified"], required: true },
     note: { type: String, default: "", maxlength: 500 },
     reportCount: { type: Number, default: 0 },
   },
