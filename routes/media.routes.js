@@ -15,6 +15,7 @@ import { assertVisible, getProfileForViewer } from "../utils/visibility.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { MAX_COMMENT_PICTURE_BYTES, commentPictureLimiter } from "../utils/commentPictures.js";
 import { MAX_VIDEO_SECONDS, parseStartSeconds, parseVideoLink } from "../utils/videoLinks.js";
+import { checkCaption } from "../utils/mediaCaption.js";
 
 export const mediaRouter = Router();
 
@@ -47,6 +48,13 @@ mediaRouter.post("/upload", requireAuth, upload.single("file"), async (req, res)
   if (isPortfolio && (await MediaItem.countDocuments({ owner: req.user.id })) >= MAX_PORTFOLIO) {
     await cloudinary.uploader.destroy(req.file.filename, { resource_type: isVideo ? "video" : "image", invalidate: true }).catch(() => {});
     return res.status(400).json({ error: `Your portfolio is full (${MAX_PORTFOLIO} pieces) — remove one to add another` });
+  }
+
+  // A portfolio piece can arrive with a caption (a form field next to the file). One that can't be kept is refused, and the file taken out again.
+  const caption = isPortfolio ? checkCaption(req.body?.caption) : { value: null };
+  if (caption.error) {
+    await cloudinary.uploader.destroy(req.file.filename, { resource_type: isVideo ? "video" : "image", invalidate: true }).catch(() => {});
+    return res.status(400).json({ error: caption.error });
   }
 
   // Portfolio videos are limited to 30 seconds. The duration is only known
@@ -83,6 +91,7 @@ mediaRouter.post("/upload", requireAuth, upload.single("file"), async (req, res)
       owner: req.user.id,
       url,
       type: mediaType,
+      caption: caption.value,
       ...(isVideo ? { durationSeconds: Number(req.file.duration) } : {}),
     });
     return res.status(201).json({ url, mediaItem: toPublicMediaItem(item) });
@@ -99,10 +108,9 @@ function badRequest(res, message) {
 // link. Only https links (or an inline image from the mock AI provider) are
 // accepted, and video links must be YouTube or a direct video file.
 mediaRouter.post("/", requireAuth, async (req, res) => {
-  const { url, type = "image", caption, isAiImage } = req.body ?? {};
-  if (caption !== undefined && caption !== null && (typeof caption !== "string" || caption.length > 200)) {
-    return badRequest(res, "Caption must be text of 200 characters or fewer");
-  }
+  const { url, type = "image", isAiImage } = req.body ?? {};
+  const caption = checkCaption(req.body?.caption);
+  if (caption.error) return badRequest(res, caption.error);
 
   if ((await MediaItem.countDocuments({ owner: req.user.id })) >= MAX_PORTFOLIO) {
     return badRequest(res, `Your portfolio is full (${MAX_PORTFOLIO} pieces) — remove one to add another`);
@@ -127,7 +135,7 @@ mediaRouter.post("/", requireAuth, async (req, res) => {
   const created = await MediaItem.create({
     owner: req.user.id,
     ...item,
-    caption: caption || null,
+    caption: caption.value,
     isAiImage: item.type === "image" ? Boolean(isAiImage) : false,
   });
   res.status(201).json({ mediaItem: toPublicMediaItem(created) });
@@ -208,16 +216,23 @@ mediaRouter.put("/:id/reaction", requireAuth, async (req, res) => {
   res.json({ likes: summary?.likes ?? 0, dislikes: summary?.dislikes ?? 0, myReaction: summary?.myReaction ?? 0 });
 });
 
-// Put a piece in one of your albums, or take it out (`{album: id}` or `{album: null}`). Only the owner, and only into the owner's own album.
+// Change a piece's caption (`{caption: "text"}`, or `{caption: null}` to take it off) and/or put it in one of your albums or take it out
+// (`{album: id}` or `{album: null}`). Only the owner, and only into the owner's own album; nothing else about a piece can be changed.
 mediaRouter.patch("/:id", requireAuth, async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: "Media item not found" });
   const item = await MediaItem.findOne({ _id: req.params.id, owner: req.user.id });
   if (!item) return res.status(404).json({ error: "Media item not found" });
   const album = req.body?.album;
-  if (album === undefined) return badRequest(res, "Say which album, or null for none");
+  const wantsCaption = req.body !== undefined && req.body !== null && Object.hasOwn(req.body, "caption");
+  if (album === undefined && !wantsCaption) return badRequest(res, "Say what to change: a caption, or an album (null for none)");
+  if (wantsCaption) {
+    const caption = checkCaption(req.body.caption);
+    if (caption.error) return badRequest(res, caption.error);
+    item.caption = caption.value;
+  }
   if (album === null) {
     item.album = null;
-  } else {
+  } else if (album !== undefined) {
     if (typeof album !== "string" || !mongoose.isValidObjectId(album) || !(await Album.exists({ _id: album, owner: req.user.id }))) {
       return res.status(404).json({ error: "Album not found" });
     }

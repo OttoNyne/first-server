@@ -139,11 +139,13 @@ describe("portfolio albums", () => {
       const alice = await signup(app, "alice");
       const a = (await makeAlbum(alice)).body.album;
       const item = await piece(alice);
-      await alice.agent.patch(`/api/media/${item._id}`).send({ album: a.id, url: "https://evil.example/x.jpg", owner: "5f1d7f3b8f1d7f3b8f1d7f3b", caption: "hax" });
+      await alice.agent.patch(`/api/media/${item._id}`).send({ album: a.id, url: "https://evil.example/x.jpg", owner: "5f1d7f3b8f1d7f3b8f1d7f3b", type: "video", isAiImage: true, likes: 99 });
       const saved = await MediaItem.findById(item._id);
       expect(saved.url).toBe("https://example.com/p1.jpg");
       expect(String(saved.owner)).toBe(alice.user.id);
-      expect(saved.caption).toBeNull();
+      expect(saved.type).toBe("image");
+      expect(saved.isAiImage).toBe(false);
+      expect(saved.caption).toBeNull(); // only a caption (and the album) can be changed, and that is its own, checked, field
     });
   });
 
