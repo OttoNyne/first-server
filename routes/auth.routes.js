@@ -3,6 +3,7 @@ import { z } from "zod";
 import { User } from "../models/User.js";
 import { requireAuth, clearAuthCookie } from "../middleware/auth.js";
 import { endAllSessions, endSessionOf, startSession } from "../services/sessions.js";
+import { signChallenge } from "../services/twoFactor.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { clientIp } from "../utils/clientIp.js";
@@ -107,6 +108,10 @@ authRouter.post("/login", async (req, res) => {
 
     // Said only after the password was right, so it can't be used to find out which accounts are suspended.
     if (user.suspendedAt) return res.status(403).json({ error: "This account has been suspended. If you think that is a mistake, contact the site's team.", code: "account_suspended" });
+
+    // Right password, but they've asked for a second step: no cookie yet. What comes back is a short-lived note that the password was
+    // right, which only /login/2fa accepts, and only together with a code (see routes/twoFactor.routes.js).
+    if (user.twoFactor?.enabled) return res.status(200).json({ twoFactorRequired: true, challenge: signChallenge(user) });
 
     await startSession(req, res, user);
     res.status(200).json({ user: await toPublicUser(user, user._id) });

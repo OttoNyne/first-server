@@ -7,7 +7,7 @@ export const AUTH_COOKIE_NAME = "token";
 
 const LAST_SEEN_EVERY_MS = 10 * 60 * 1000;
 
-const passwordVersion = (user) => (user.passwordChangedAt ? user.passwordChangedAt.getTime() : 0);
+export const passwordVersion = (user) => (user.passwordChangedAt ? user.passwordChangedAt.getTime() : 0);
 
 // sid = the Session row this sign-in belongs to (see models/Session.js); ending that row ends the sign-in.
 export function signAuthToken(user, sid) {
@@ -60,6 +60,8 @@ export function clearAuthCookie(res) {
 // still just what's in the token.)
 async function resolveSession(token) {
   const payload = jwt.verify(token, process.env.JWT_SECRET); // throws if forged/expired
+  // Signed with the same secret but made for something else (the note that a password was right and a code is still needed): not a sign-in.
+  if (payload.purpose) return null;
   const user = await User.findById(payload.id).select("passwordChangedAt suspendedAt sessionsRevokedAt");
   if (!user) return null;
   if (user.suspendedAt) {
