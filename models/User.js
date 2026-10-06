@@ -82,6 +82,13 @@ const userSchema = new mongoose.Schema(
       accentColor: String,
       fontFamily: String,
       layoutStyle: String,
+      // How the profile is laid out and styled (see utils/profileStyle.js): each a choice from a fixed list.
+      cardStyle: String,
+      corners: String,
+      density: String,
+      headings: String,
+      avatarShape: String,
+      width: String,
     },
   },
   { timestamps: true }

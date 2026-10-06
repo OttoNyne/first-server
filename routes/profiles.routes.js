@@ -23,6 +23,7 @@ import { toPublicUser, toPublicTrack, toPublicComment } from "../utils/serialize
 import { checkComment } from "../utils/commentInput.js";
 import { releasePictures } from "../services/commentPictures.js";
 import { escapeRegex } from "../utils/regex.js";
+import { applyThemeChange, checkTheme } from "../utils/profileStyle.js";
 
 export const profilesRouter = Router();
 
@@ -75,6 +76,9 @@ profilesRouter.patch("/me", requireAuth, async (req, res) => {
   const user = await User.findById(req.user.id);
   const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections, showActivity, profileViews, showConnections } = req.body;
   const fields = {};
+  // the theme is checked before anything is changed, so a bad setting leaves the profile exactly as it was
+  const themeChange = theme !== undefined ? checkTheme(theme) : null;
+  if (themeChange?.error) return res.status(400).json({ error: themeChange.error });
   for (const [name, value, max, label] of [["mood", mood, MAX_MOOD, "Mood"], ["listeningTo", listeningTo, MAX_LISTENING, "Listening to"]]) {
     if (value === undefined) continue;
     const checked = checkLine(value, max, label);
@@ -134,7 +138,7 @@ profilesRouter.patch("/me", requireAuth, async (req, res) => {
   if (wallpaperMotion !== undefined) user.wallpaperMotion = wallpaperMotion;
   Object.assign(user, fields);
   if (isPrivate !== undefined) user.isPrivate = isPrivate;
-  if (theme !== undefined) user.theme = { ...(user.theme?.toObject?.() ?? user.theme ?? {}), ...theme };
+  if (theme !== undefined) user.theme = applyThemeChange(user.theme?.toObject?.() ?? user.theme, themeChange.value);
 
   await user.save();
   // turning profile views off forgets every visit: the ones to your profile and the ones you made to other people's
