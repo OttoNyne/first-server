@@ -59,6 +59,16 @@ const userSchema = new mongoose.Schema(
     csVerifiedAdminAt: { type: Date, default: null },
     csVerifiedEarned: { type: Boolean, default: false },
     csVerifiedEarnedAt: { type: Date, default: null },
+    // Which kinds of push notification they want (see utils/pushInput.js); all on until they say otherwise. Only the owner ever sees these.
+    pushPrefs: {
+      _id: false,
+      messages: { type: Boolean, default: true },
+      friends: { type: Boolean, default: true },
+      comments: { type: Boolean, default: true },
+      events: { type: Boolean, default: true },
+      live: { type: Boolean, default: true },
+      updates: { type: Boolean, default: true },
+    },
     // Opt-in profile views (default off): they may see who visits their profile, and visitors they look at may see them (see routes/profileViews.routes.js).
     profileViews: { type: Boolean, default: false },
     // Sessions (JWTs) issued before this moment are rejected — set when the

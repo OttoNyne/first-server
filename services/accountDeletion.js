@@ -37,6 +37,7 @@ import { LiveSession, LiveListener, LiveSignal, LiveComment } from "../models/Li
 import { deleteSfuRoom } from "./livekit.js";
 import { EmailVerification } from "../models/EmailVerification.js";
 import { deleteAllStoredAssets } from "./storedAssets.js";
+import { PushSubscription } from "../models/PushSubscription.js";
 
 // Groups the user created: an empty group is deleted; otherwise it is handed
 // to its longest-standing other member (promoted to admin) so other people's
@@ -146,6 +147,7 @@ export async function deleteAccount(userId) {
   // Notifications addressed to them, and ones they caused (actorId was stored
   // as either a string or an ObjectId depending on the route that created it).
   await Notification.deleteMany({ $or: [{ recipient: id }, { "payload.actorId": { $in: [String(id), id] } }] });
+  await PushSubscription.deleteMany({ user: id }); // the devices that were getting their notifications
 
   // Their reports, and reports about them or their content.
   const targetIds = [id, ...postIds, ...comments.map((c) => c._id), ...profileComments.map((c) => c._id), ...mediaComments.map((c) => c._id), ...blogComments.map((c) => c._id), ...eventIds, ...blogIds, ...bulletinIds, ...topicIds, ...replyIds];

@@ -45,3 +45,10 @@ services:
       # Comma-separated email addresses of the site's moderators (each must also be confirmed on the account). Without it nobody can use the moderation review screen.
       - key: ADMIN_EMAILS
         sync: false
+      # Push notifications: a key pair made with `npx web-push generate-vapid-keys`, and VAPID_SUBJECT as a mailto: or https address that says who is sending. Without all three nothing is pushed.
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
