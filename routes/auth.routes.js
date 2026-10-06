@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { User } from "../models/User.js";
-import { requireAuth, signAuthToken, setAuthCookie, clearAuthCookie } from "../middleware/auth.js";
+import { requireAuth, clearAuthCookie } from "../middleware/auth.js";
+import { endAllSessions, endSessionOf, startSession } from "../services/sessions.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { clientIp } from "../utils/clientIp.js";
@@ -76,8 +77,7 @@ authRouter.post("/register", async (req, res) => {
       }
     }
 
-    const token = signAuthToken(user);
-    setAuthCookie(res, token);
+    await startSession(req, res, user);
     res.status(201).json({ user: await toPublicUser(user, user._id), ...(invitedBy ? { invitedBy } : {}) });
   } catch (err) {
     console.error(err);
@@ -108,8 +108,7 @@ authRouter.post("/login", async (req, res) => {
     // Said only after the password was right, so it can't be used to find out which accounts are suspended.
     if (user.suspendedAt) return res.status(403).json({ error: "This account has been suspended. If you think that is a mistake, contact the site's team.", code: "account_suspended" });
 
-    const token = signAuthToken(user);
-    setAuthCookie(res, token);
+    await startSession(req, res, user);
     res.status(200).json({ user: await toPublicUser(user, user._id) });
   } catch (err) {
     console.error(err);
@@ -149,7 +148,8 @@ authRouter.put("/password", requireAuth, async (req, res) => {
     // one is re-issued so the person changing their password stays signed in.
     user.passwordChangedAt = new Date();
     await user.save();
-    setAuthCookie(res, signAuthToken(user));
+    await endAllSessions(user._id);
+    await startSession(req, res, user);
     res.status(204).end();
   } catch (err) {
     console.error(err);
@@ -236,6 +236,7 @@ authRouter.post("/reset-password", async (req, res) => {
     // password (or a stolen session) is signed out. The person resetting signs in afresh.
     user.passwordChangedAt = new Date();
     await user.save();
+    await endAllSessions(user._id);
     await PasswordReset.deleteMany({ user: user._id });
     sendMail({
       to: user.email,
@@ -252,7 +253,8 @@ authRouter.post("/reset-password", async (req, res) => {
   }
 });
 
-authRouter.post("/logout", (req, res) => {
+authRouter.post("/logout", async (req, res) => {
+  await endSessionOf(req);
   clearAuthCookie(res);
   res.status(204).end();
 });

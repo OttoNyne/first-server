@@ -248,7 +248,7 @@ profilesRouter.put("/me/username", requireAuth, async (req, res) => {
   await usernameChanges.hit(req.user.id);
   await UsernameHistory.create({ username: previous, user: user._id, expireAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) });
   // The session token carries the username; re-issue it so it's current.
-  setAuthCookie(res, signAuthToken(user));
+  setAuthCookie(res, signAuthToken(user, req.user.sid));
   res.json({ user: await toPublicUser(user, req.user.id) });
 });
 

@@ -74,6 +74,8 @@ const userSchema = new mongoose.Schema(
     // Sessions (JWTs) issued before this moment are rejected — set when the
     // password changes so old/stolen sessions stop working.
     passwordChangedAt: { type: Date, default: null },
+    // "Sign out everywhere else" was used at this moment: sign-ins from before devices were listed (no row to end) stop working too.
+    sessionsRevokedAt: { type: Date, default: null },
     // Whether they have opened the link we emailed to confirm the address is theirs.
     emailVerified: { type: Boolean, default: false },
     theme: {

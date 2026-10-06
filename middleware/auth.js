@@ -1,14 +1,19 @@
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 import { User } from "../models/User.js";
+import { Session } from "../models/Session.js";
 
 export const AUTH_COOKIE_NAME = "token";
 
+const LAST_SEEN_EVERY_MS = 10 * 60 * 1000;
+
 const passwordVersion = (user) => (user.passwordChangedAt ? user.passwordChangedAt.getTime() : 0);
 
-export function signAuthToken(user) {
+// sid = the Session row this sign-in belongs to (see models/Session.js); ending that row ends the sign-in.
+export function signAuthToken(user, sid) {
   return jwt.sign(
     // pv = the password version (when the password last changed, in ms) this session was issued under.
-    { id: user._id.toString(), username: user.username, pv: passwordVersion(user) },
+    { id: user._id.toString(), username: user.username, pv: passwordVersion(user), ...(sid ? { sid: String(sid) } : {}) },
     process.env.JWT_SECRET,
     { expiresIn: "7d" }
   );
@@ -55,7 +60,7 @@ export function clearAuthCookie(res) {
 // still just what's in the token.)
 async function resolveSession(token) {
   const payload = jwt.verify(token, process.env.JWT_SECRET); // throws if forged/expired
-  const user = await User.findById(payload.id).select("passwordChangedAt suspendedAt");
+  const user = await User.findById(payload.id).select("passwordChangedAt suspendedAt sessionsRevokedAt");
   if (!user) return null;
   if (user.suspendedAt) {
     const err = new Error("This account has been suspended");
@@ -70,6 +75,17 @@ async function resolveSession(token) {
     // Sessions issued before pv existed: the older whole-second comparison.
     const changedAtSeconds = user.passwordChangedAt ? Math.floor(user.passwordChangedAt.getTime() / 1000) : 0;
     if (payload.iat < changedAtSeconds) return null;
+  }
+  if (payload.sid) {
+    // A sign-in made since devices were listed: it works only while its row exists, so ending it from the list ends it everywhere.
+    if (!mongoose.isValidObjectId(payload.sid)) return null;
+    const row = await Session.findOne({ _id: payload.sid, user: payload.id }).select("lastSeenAt");
+    if (!row) return null;
+    // "Last used" is only as exact as the owner needs, so most requests write nothing.
+    if (Date.now() - row.lastSeenAt.getTime() > LAST_SEEN_EVERY_MS) await Session.updateOne({ _id: row._id }, { lastSeenAt: new Date() });
+  } else if (user.sessionsRevokedAt && payload.iat < Math.floor(user.sessionsRevokedAt.getTime() / 1000)) {
+    // A sign-in from before devices were listed: it can't be ended one by one, but "sign out everywhere else" still reaches it.
+    return null;
   }
   return payload;
 }
