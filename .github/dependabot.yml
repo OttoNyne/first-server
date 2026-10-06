@@ -1,11 +1,23 @@
 version: 2
 updates:
+  # Small updates (minor and patch releases) arrive together as one pull request a week, so there is one set of checks to wait for and one
+  # change to review. Major releases still come one at a time, since those are the ones that can break things.
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      npm-minor-and-patch:
+        update-types:
+          - minor
+          - patch
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    groups:
+      actions-minor-and-patch:
+        update-types:
+          - minor
+          - patch
