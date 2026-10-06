@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { forgetReactions } from "../utils/reactions.js";
 import { Post } from "../models/Post.js";
 import { Comment } from "../models/Comment.js";
 import { ProfileComment } from "../models/ProfileComment.js";
@@ -97,6 +98,7 @@ export async function removeContent(type, id) {
       await Comment.deleteMany({ post: post._id });
       await releasePictures(withPictures);
       await post.deleteOne();
+      await forgetReactions("post", [post._id]);
       if (post.imageUrl) await deleteStoredAssetIfUnused({ ownerId: post.author, url: post.imageUrl });
       return true;
     }

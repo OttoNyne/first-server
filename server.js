@@ -17,6 +17,12 @@ const { startReminderTimer } = await import("./services/scheduledLives.js");
 const { startEventReminderTimer } = await import("./services/events.js");
 const { startBirthdayTimer } = await import("./services/birthdays.js");
 const { startCsVerifiedTimer } = await import("./services/csVerified.js");
+const { migrateMediaReactions } = await import("./services/reactionMigration.js");
+
+// Old likes on portfolio pieces become 👍 reactions (and the old collection is emptied); nothing to do once that has happened.
+migrateMediaReactions()
+  .then((n) => n && console.log(`Carried ${n} old likes over to reactions`))
+  .catch((err) => console.error("Couldn't carry old likes over:", err.message));
 
 const PORT = process.env.PORT || 5000;
 

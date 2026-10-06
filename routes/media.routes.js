@@ -2,7 +2,6 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import { v2 as cloudinary } from "cloudinary";
 import { MediaItem } from "../models/MediaItem.js";
-import { MediaReaction } from "../models/MediaReaction.js";
 import { MediaComment } from "../models/MediaComment.js";
 import { Album } from "../models/Album.js";
 import { User } from "../models/User.js";
@@ -16,6 +15,7 @@ import { createLimiter } from "../utils/rateLimit.js";
 import { MAX_COMMENT_PICTURE_BYTES, commentPictureLimiter } from "../utils/commentPictures.js";
 import { MAX_VIDEO_SECONDS, parseStartSeconds, parseVideoLink } from "../utils/videoLinks.js";
 import { checkCaption } from "../utils/mediaCaption.js";
+import { checkEmoji, forgetReactions, notifyOfReaction, setReaction, summarise } from "../utils/reactions.js";
 
 export const mediaRouter = Router();
 
@@ -141,54 +141,28 @@ mediaRouter.post("/", requireAuth, async (req, res) => {
   res.status(201).json({ mediaItem: toPublicMediaItem(created) });
 });
 
-// Like/dislike counts for a set of items, plus the viewer's own reaction.
-async function reactionSummary(itemIds, viewerId) {
-  const counts = await MediaReaction.aggregate([
-    { $match: { item: { $in: itemIds } } },
-    { $group: { _id: { item: "$item", value: "$value" }, n: { $sum: 1 } } },
-  ]);
-  const byItem = new Map();
-  for (const c of counts) {
-    const key = String(c._id.item);
-    const entry = byItem.get(key) ?? { likes: 0, dislikes: 0, myReaction: 0 };
-    if (c._id.value === 1) entry.likes = c.n;
-    else entry.dislikes = c.n;
-    byItem.set(key, entry);
-  }
-  if (viewerId) {
-    const mine = await MediaReaction.find({ item: { $in: itemIds }, user: viewerId });
-    for (const r of mine) {
-      const key = String(r.item);
-      const entry = byItem.get(key) ?? { likes: 0, dislikes: 0, myReaction: 0 };
-      entry.myReaction = r.value;
-      byItem.set(key, entry);
-    }
-  }
-  return byItem;
-}
+const reactionLimit = createLimiter({ name: "reaction", limit: 300, windowMs: 60 * 60 * 1000 });
 
 mediaRouter.get("/user/:username", attachUserIfPresent, async (req, res) => {
   try {
     const user = await getProfileForViewer(req.params.username, req.user?.id);
     const items = await MediaItem.find({ owner: user._id }).sort("-createdAt");
     const ids = items.map((i) => i._id);
-    const summary = await reactionSummary(ids, req.user?.id);
+    const summary = await summarise("media", ids, req.user?.id);
     const counts = new Map((await MediaComment.aggregate([{ $match: { item: { $in: ids } } }, { $group: { _id: "$item", n: { $sum: 1 } } }])).map((c) => [String(c._id), c.n]));
     res.json({
-      media: items.map((item) => toPublicMediaItem(item, { ...summary.get(String(item._id)), commentCount: counts.get(String(item._id)) ?? 0 })),
+      media: items.map((item) => toPublicMediaItem(item, { reactions: summary.get(String(item._id)), commentCount: counts.get(String(item._id)) ?? 0 })),
     });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
 });
 
-// Like (1), dislike (-1) or clear (0) your reaction. You can only react to
-// items you're allowed to see (private profiles, blocks).
-const reactionLimit = createLimiter({ name: "media-reaction", limit: 300, windowMs: 60 * 60 * 1000 });
-
+// React to a piece with one of the six emoji (`{emoji: "love"}`), change your reaction, or take it away (`{emoji: null}`). You can only react
+// to pieces you're allowed to see (private profiles, blocks); the owner is told once about each person's first reaction.
 mediaRouter.put("/:id/reaction", requireAuth, async (req, res) => {
-  const value = req.body?.value;
-  if (![1, -1, 0].includes(value)) return badRequest(res, "value must be 1 (like), -1 (dislike) or 0 (clear)");
+  const emoji = checkEmoji(req.body?.emoji);
+  if (emoji.error) return badRequest(res, emoji.error);
 
   const item = await MediaItem.findById(req.params.id);
   if (!item) return res.status(404).json({ error: "Media item not found" });
@@ -203,17 +177,9 @@ mediaRouter.put("/:id/reaction", requireAuth, async (req, res) => {
     return res.status(429).json({ error: "You're reacting too fast — try again in a bit" });
   }
 
-  if (value === 0) {
-    await MediaReaction.deleteOne({ item: item._id, user: req.user.id });
-  } else {
-    await MediaReaction.findOneAndUpdate(
-      { item: item._id, user: req.user.id },
-      { item: item._id, user: req.user.id, value },
-      { upsert: true, setDefaultsOnInsert: true }
-    );
-  }
-  const summary = (await reactionSummary([item._id], req.user.id)).get(String(item._id));
-  res.json({ likes: summary?.likes ?? 0, dislikes: summary?.dislikes ?? 0, myReaction: summary?.myReaction ?? 0 });
+  const { created } = await setReaction({ targetType: "media", target: item._id, user: req.user.id, emoji: emoji.value });
+  if (created) await notifyOfReaction({ ownerId: item.owner, actorId: req.user.id, targetType: "media", target: item._id, emoji: emoji.value });
+  res.json({ reactions: (await summarise("media", [item._id], req.user.id)).get(String(item._id)) });
 });
 
 // Change a piece's caption (`{caption: "text"}`, or `{caption: null}` to take it off) and/or put it in one of your albums or take it out
@@ -247,7 +213,7 @@ mediaRouter.delete("/:id", requireAuth, async (req, res) => {
   if (!item) return res.status(404).json({ error: "Media item not found" });
   if (String(item.owner) !== req.user.id) return res.status(403).json({ error: "Not allowed" });
   await item.deleteOne();
-  await MediaReaction.deleteMany({ item: item._id });
+  await forgetReactions("media", [item._id]);
   const withPictures = await MediaComment.find({ item: item._id, imageUrl: { $ne: null } });
   await MediaComment.deleteMany({ item: item._id });
   await releasePictures(withPictures);

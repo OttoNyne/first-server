@@ -1,4 +1,5 @@
 import { areFriends } from "./visibility.js";
+import { emptySummary } from "./reactions.js";
 
 // Every place a User gets embedded in a response (search, friends lists,
 // group rosters, comment/post authors, notification actors, top friends...)
@@ -28,9 +29,7 @@ export function toPublicMediaItem(item, reactions = {}) {
     startSeconds: item.startSeconds ?? 0,
     durationSeconds: item.durationSeconds ?? null,
     albumId: item.album ?? null,
-    likes: reactions.likes ?? 0,
-    dislikes: reactions.dislikes ?? 0,
-    myReaction: reactions.myReaction ?? 0,
+    reactions: reactions.reactions ?? emptySummary(),
     commentCount: reactions.commentCount ?? 0,
     createdAt: item.createdAt,
   };
@@ -62,7 +61,7 @@ export async function toPublicComment(comment, viewerId) {
   };
 }
 
-export async function toPublicPost(post, commentCount = 0, viewerId) {
+export async function toPublicPost(post, commentCount = 0, viewerId, reactions = emptySummary()) {
   return {
     id: post._id,
     authorId: post.author?._id ?? post.author,
@@ -77,5 +76,6 @@ export async function toPublicPost(post, commentCount = 0, viewerId) {
     createdAt: post.createdAt,
     editedAt: post.editedAt ?? null,
     commentCount,
+    reactions,
   };
 }

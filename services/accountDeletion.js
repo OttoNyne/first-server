@@ -24,7 +24,7 @@ import { Block } from "../models/Block.js";
 import { Report } from "../models/Report.js";
 import { Task } from "../models/Task.js";
 import { UsernameHistory } from "../models/UsernameHistory.js";
-import { MediaReaction } from "../models/MediaReaction.js";
+import { Reaction } from "../models/Reaction.js";
 import { MediaComment } from "../models/MediaComment.js";
 import { BlogComment } from "../models/BlogComment.js";
 import { releasePictures } from "./commentPictures.js";
@@ -96,7 +96,7 @@ export async function deleteAccount(userId) {
   await Block.deleteMany({ $or: [{ blocker: id }, { blocked: id }] });
   // Reactions on their pictures, and reactions they left on others'.
   const mediaIds = (await MediaItem.find({ owner: id }).select("_id")).map((m) => m._id);
-  await MediaReaction.deleteMany({ $or: [{ user: id }, { item: { $in: mediaIds } }] });
+  await Reaction.deleteMany({ $or: [{ user: id }, { targetType: "media", target: { $in: mediaIds } }, { targetType: "post", target: { $in: postIds } }] });
   // Comments they left on others' pieces, and everyone's comments on theirs.
   const mediaComments = await MediaComment.find({ $or: [{ author: id }, { item: { $in: mediaIds } }] }).select("_id author imageUrl");
   await MediaComment.deleteMany({ _id: { $in: mediaComments.map((c) => c._id) } });

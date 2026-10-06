@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
-// One like (+1) or dislike (-1) per user per portfolio item.
+// The old like (+1) / dislike (-1) on a portfolio piece. Nothing writes to this any more: reactions are in models/Reaction.js. It is kept only
+// so services/reactionMigration.js can carry the old likes over (as the 👍 reaction) and clear this collection out.
 const mediaReactionSchema = new mongoose.Schema(
   {
     item: { type: mongoose.Schema.Types.ObjectId, ref: "MediaItem", required: true },

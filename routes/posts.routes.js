@@ -10,6 +10,7 @@ import mongoose from "mongoose";
 import { deleteStoredAssetIfUnused } from "../services/storedAssets.js";
 import { MAX_POST, allowEdit, checkText, cursorFilter } from "../utils/textInput.js";
 import { createLimiter } from "../utils/rateLimit.js";
+import { checkEmoji, forgetReactions, notifyOfReaction, setReaction, summarise } from "../utils/reactions.js";
 
 const PAGE = 20;
 const postLimiter = createLimiter({ name: "post-create", limit: 20, windowMs: 10 * 60 * 1000 });
@@ -23,7 +24,8 @@ async function withCommentCounts(posts, viewerId) {
     { $group: { _id: "$post", count: { $sum: 1 } } },
   ]);
   const countMap = new Map(counts.map((c) => [String(c._id), c.count]));
-  return Promise.all(posts.map((p) => toPublicPost(p, countMap.get(String(p._id)) || 0, viewerId)));
+  const reactions = await summarise("post", posts.map((p) => p._id), viewerId);
+  return Promise.all(posts.map((p) => toPublicPost(p, countMap.get(String(p._id)) || 0, viewerId, reactions.get(String(p._id)))));
 }
 
 postsRouter.get("/feed", async (req, res) => {
@@ -139,6 +141,26 @@ postsRouter.patch("/:id", async (req, res) => {
   res.json({ post: withCount });
 });
 
+// React to a post with one of the six emoji (`{emoji: "love"}`), change your reaction, or take it away (`{emoji: null}`). Visible to the same
+// people as the post itself (anyone else gets the 404 a missing post gets); the author is told once about each person's first reaction.
+const reactionLimit = createLimiter({ name: "reaction", limit: 300, windowMs: 60 * 60 * 1000 });
+postsRouter.put("/:id/reaction", async (req, res) => {
+  const emoji = checkEmoji(req.body?.emoji);
+  if (emoji.error) return res.status(400).json({ error: emoji.error });
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: "Post not found" });
+  const post = await Post.findById(req.params.id).populate("author");
+  if (!post || !post.author) return res.status(404).json({ error: "Post not found" });
+  try {
+    await assertVisible(post.author, req.user.id);
+  } catch {
+    return res.status(404).json({ error: "Post not found" });
+  }
+  if (!(await reactionLimit.allow(req.user.id))) return res.status(429).json({ error: "You're reacting too fast — try again in a bit" });
+  const { created } = await setReaction({ targetType: "post", target: post._id, user: req.user.id, emoji: emoji.value });
+  if (created) await notifyOfReaction({ ownerId: post.author._id, actorId: req.user.id, targetType: "post", target: post._id, emoji: emoji.value });
+  res.json({ reactions: (await summarise("post", [post._id], req.user.id)).get(String(post._id)) });
+});
+
 postsRouter.delete("/:id", async (req, res) => {
   const post = await Post.findById(req.params.id);
   if (!post) return res.status(404).json({ error: "Post not found" });
@@ -147,6 +169,7 @@ postsRouter.delete("/:id", async (req, res) => {
   await Comment.deleteMany({ post: post._id });
   await releasePictures(withPictures);
   await post.deleteOne();
+  await forgetReactions("post", [post._id]);
   // An AI-generated image that only this post used would otherwise sit on
   // Cloudinary forever.
   if (post.imageUrl) await deleteStoredAssetIfUnused({ ownerId: post.author, url: post.imageUrl });

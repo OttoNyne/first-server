@@ -4,7 +4,7 @@
 export const PUSH_CATEGORIES = {
   messages: ["message"],
   friends: ["friend_request", "friend_accept", "invite_joined", "group_invite", "friend_birthday"],
-  comments: ["comment", "profile_comment", "media_comment", "blog_comment"],
+  comments: ["comment", "profile_comment", "media_comment", "blog_comment", "reaction"],
   events: ["event_created", "event_updated", "event_cancelled", "event_reminder", "live_scheduled", "live_reminder"],
   live: ["live_started"],
   updates: ["blog_post", "help_offer", "help_accepted", "report_resolved", "content_removed", "cs_verified"],

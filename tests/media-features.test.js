@@ -48,7 +48,7 @@ describe("portfolio reactions and videos", () => {
     ({ app } = await import("../app.js"));
     m = {
       MediaItem: (await import("../models/MediaItem.js")).MediaItem,
-      MediaReaction: (await import("../models/MediaReaction.js")).MediaReaction,
+      Reaction: (await import("../models/Reaction.js")).Reaction,
       StoredAsset: (await import("../models/StoredAsset.js")).StoredAsset,
     };
   });
@@ -65,28 +65,43 @@ describe("portfolio reactions and videos", () => {
     const res = await owner.agent.post("/api/media").send({ url: "https://images.example.com/p.jpg", type: "image" });
     return res.body.mediaItem.id;
   }
-  const react = (agent, id, value) => agent.put(`/api/media/${id}/reaction`).send({ value });
+  const react = (agent, id, emoji) => agent.put(`/api/media/${id}/reaction`).send({ emoji });
   const listAs = async (agent, username) => (await agent.get(`/api/media/user/${username}`)).body.media;
+  const summary = (counts = {}, mine = null) => {
+    const full = { like: 0, love: 0, laugh: 0, wow: 0, sad: 0, fire: 0, ...counts };
+    return { counts: full, total: Object.values(full).reduce((a, n) => a + n, 0), mine };
+  };
 
-  describe("likes and dislikes", () => {
-    it("lets people like, switch to dislike, and clear — one reaction each", async () => {
+  describe("emoji reactions", () => {
+    it("lets people react with one of six emoji, change it, and take it away — one reaction each", async () => {
       const alice = await signup(app, "alice");
       const bobby = await signup(app, "bobby");
       const id = await addPicture(alice);
 
-      let res = await react(bobby.agent, id, 1);
+      let res = await react(bobby.agent, id, "like");
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({ likes: 1, dislikes: 0, myReaction: 1 });
+      expect(res.body).toEqual({ reactions: summary({ like: 1 }, "like") });
 
-      res = await react(bobby.agent, id, 1); // liking twice doesn't double count
-      expect(res.body).toEqual({ likes: 1, dislikes: 0, myReaction: 1 });
+      res = await react(bobby.agent, id, "like"); // reacting the same way twice doesn't double count
+      expect(res.body.reactions).toEqual(summary({ like: 1 }, "like"));
 
-      res = await react(bobby.agent, id, -1); // switch
-      expect(res.body).toEqual({ likes: 0, dislikes: 1, myReaction: -1 });
+      res = await react(bobby.agent, id, "fire"); // switch
+      expect(res.body.reactions).toEqual(summary({ fire: 1 }, "fire"));
+      expect(await m.Reaction.countDocuments()).toBe(1);
 
-      res = await react(bobby.agent, id, 0); // clear
-      expect(res.body).toEqual({ likes: 0, dislikes: 0, myReaction: 0 });
-      expect(await m.MediaReaction.countDocuments()).toBe(0);
+      res = await react(bobby.agent, id, null); // take it away
+      expect(res.body.reactions).toEqual(summary());
+      expect(await m.Reaction.countDocuments()).toBe(0);
+      expect((await react(bobby.agent, id, null)).status).toBe(200); // and again is fine
+    });
+
+    it("takes every one of the six", async () => {
+      const alice = await signup(app, "alice");
+      const bobby = await signup(app, "bobby");
+      const id = await addPicture(alice);
+      for (const emoji of ["like", "love", "laugh", "wow", "sad", "fire"]) {
+        expect((await react(bobby.agent, id, emoji)).body.reactions.mine, emoji).toBe(emoji);
+      }
     });
 
     it("counts everyone's reactions, and shows each viewer only their own", async () => {
@@ -94,27 +109,30 @@ describe("portfolio reactions and videos", () => {
       const bobby = await signup(app, "bobby");
       const carol = await signup(app, "carol");
       const id = await addPicture(alice);
-      await react(bobby.agent, id, 1);
-      await react(carol.agent, id, -1);
-      await react(alice.agent, id, 1); // owners can like their own work
+      await react(bobby.agent, id, "love");
+      await react(carol.agent, id, "love");
+      await react(alice.agent, id, "like"); // owners can react to their own work
 
-      const asBobby = (await listAs(bobby.agent, "alice"))[0];
-      expect(asBobby).toMatchObject({ likes: 2, dislikes: 1, myReaction: 1 });
-      const asCarol = (await listAs(carol.agent, "alice"))[0];
-      expect(asCarol).toMatchObject({ likes: 2, dislikes: 1, myReaction: -1 });
-      const signedOut = (await listAs(request(app), "alice"))[0];
-      expect(signedOut).toMatchObject({ likes: 2, dislikes: 1, myReaction: 0 });
+      const expected = { like: 1, love: 2 };
+      expect((await listAs(bobby.agent, "alice"))[0].reactions).toEqual(summary(expected, "love"));
+      expect((await listAs(alice.agent, "alice"))[0].reactions).toEqual(summary(expected, "like"));
+      expect((await listAs(request(app), "alice"))[0].reactions).toEqual(summary(expected, null));
+      expect((await listAs(carol.agent, "alice"))[0]).not.toHaveProperty("likes");
     });
 
-    it("rejects invalid values, unknown items, malformed ids, and signed-out reactions", async () => {
+    it("rejects anything that isn't one of the six or null, unknown items, malformed ids, and signed-out reactions", async () => {
       const alice = await signup(app, "alice");
       const id = await addPicture(alice);
-      for (const bad of [2, "1", null, true, undefined]) {
-        expect((await react(alice.agent, id, bad)).status).toBe(400);
+      for (const bad of [1, -1, 0, "1", "LIKE", "thumbs", "👍", "", true, {}, ["like"], undefined]) {
+        const res = await react(alice.agent, id, bad);
+        expect(res.status, JSON.stringify(bad)).toBe(400);
+        expect(res.body.error).toMatch(/emoji must be one of/);
       }
-      expect((await react(alice.agent, "64b0f0f0f0f0f0f0f0f0f0f0", 1)).status).toBe(404);
-      expect((await react(alice.agent, "not-an-id", 1)).status).toBe(400);
-      expect((await request(app).put(`/api/media/${id}/reaction`).send({ value: 1 })).status).toBe(401);
+      expect((await alice.agent.put(`/api/media/${id}/reaction`).send({ value: 1 })).status).toBe(400); // the old like/dislike way
+      expect((await react(alice.agent, "64b0f0f0f0f0f0f0f0f0f0f0", "like")).status).toBe(404);
+      expect((await react(alice.agent, "not-an-id", "like")).status).toBe(400);
+      expect((await request(app).put(`/api/media/${id}/reaction`).send({ emoji: "like" })).status).toBe(401);
+      expect(await m.Reaction.countDocuments()).toBe(0);
     });
 
     it("respects private profiles and blocks", async () => {
@@ -124,24 +142,24 @@ describe("portfolio reactions and videos", () => {
       const id = await addPicture(alice);
 
       await alice.agent.patch("/api/profiles/me").send({ isPrivate: true });
-      expect((await react(bobby.agent, id, 1)).status).toBe(404); // a stranger can't even tell it exists
+      expect((await react(bobby.agent, id, "like")).status).toBe(404); // a stranger can't even tell it exists
       const { friendship } = (await bobby.agent.post("/api/friends/request/alice")).body;
       await alice.agent.post(`/api/friends/accept/${friendship._id}`);
-      expect((await react(bobby.agent, id, 1)).status).toBe(200); // a friend can
+      expect((await react(bobby.agent, id, "like")).status).toBe(200); // a friend can
 
       await alice.agent.patch("/api/profiles/me").send({ isPrivate: false });
       await alice.agent.post("/api/users/carol/block");
-      expect((await react(carol.agent, id, 1)).status).toBe(404);
+      expect((await react(carol.agent, id, "like")).status).toBe(404);
     });
 
     it("removes reactions when the picture is deleted", async () => {
       const alice = await signup(app, "alice");
       const bobby = await signup(app, "bobby");
       const id = await addPicture(alice);
-      await react(bobby.agent, id, 1);
+      await react(bobby.agent, id, "love");
 
       expect((await alice.agent.delete(`/api/media/${id}`)).status).toBe(204);
-      expect(await m.MediaReaction.countDocuments()).toBe(0);
+      expect(await m.Reaction.countDocuments()).toBe(0);
     });
 
     it("removes reactions on and by a user when their account is deleted", async () => {
@@ -149,13 +167,13 @@ describe("portfolio reactions and videos", () => {
       const bobby = await signup(app, "bobby");
       const aliceItem = await addPicture(alice);
       const bobbyItem = await addPicture(bobby);
-      await react(bobby.agent, aliceItem, 1);
-      await react(alice.agent, bobbyItem, -1);
+      await react(bobby.agent, aliceItem, "love");
+      await react(alice.agent, bobbyItem, "wow");
 
       await alice.agent.delete("/api/profiles/me").send({ password: "password123" });
 
-      expect(await m.MediaReaction.countDocuments()).toBe(0);
-      expect((await listAs(bobby.agent, "bobby"))[0]).toMatchObject({ likes: 0, dislikes: 0 });
+      expect(await m.Reaction.countDocuments()).toBe(0);
+      expect((await listAs(bobby.agent, "bobby"))[0].reactions).toEqual(summary());
     });
   });
 
@@ -295,7 +313,7 @@ describe("portfolio reactions and videos", () => {
     it("lists video items with their start time", async () => {
       await addLink("https://youtu.be/dQw4w9WgXcQ", { startSeconds: 7 });
       const list = (await agent.get("/api/media/user/linker")).body.media;
-      expect(list[0]).toMatchObject({ type: "embed", startSeconds: 7, likes: 0, dislikes: 0, myReaction: 0 });
+      expect(list[0]).toMatchObject({ type: "embed", startSeconds: 7, reactions: { total: 0, mine: null } });
     });
   });
 });

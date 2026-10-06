@@ -3,6 +3,7 @@ import { PushSubscription } from "../models/PushSubscription.js";
 import { User } from "../models/User.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { categoryOf } from "../utils/pushInput.js";
+import { emojiOf } from "../utils/reactionKeys.js";
 
 // Push notifications: when someone gets a notification (the bell), the devices they have turned notifications on for get a message too,
 // even with the site closed. Everything here is best effort and never stops the thing that caused the notification.
@@ -72,6 +73,12 @@ export function describePush(n, actor, recipient) {
       return { body: `${who} commented on your portfolio`, url: `${mine}#portfolio` };
     case "blog_comment":
       return { body: `${who} commented on your blog entry`, url: p.entryId ? `/blog/${id(p.entryId)}` : "/" };
+    case "reaction": {
+      const mark = emojiOf(p.emoji);
+      return p.targetType === "post"
+        ? { body: `${who} reacted ${mark} to your post`, url: p.targetId ? `/posts/${id(p.targetId)}` : "/" }
+        : { body: `${who} reacted ${mark} to your portfolio`, url: p.targetId ? `${mine}?piece=${id(p.targetId)}#portfolio` : `${mine}#portfolio` };
+    }
     case "event_created":
       return { body: `${who} is planning an event`, url: p.eventId ? `/events/${id(p.eventId)}` : "/events" };
     case "event_updated":
