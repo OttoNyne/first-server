@@ -13,6 +13,7 @@ import { cleanBody } from "../utils/blogText.js";
 export const EDIT_WINDOW_MS = 15 * 60 * 1000;
 import { createLimiter } from "../utils/rateLimit.js";
 import { Notification } from "../models/Notification.js";
+import { tellBoth } from "../services/liveUpdates.js";
 
 // Direct messages are friends-only, which is what keeps them from becoming an
 // unsolicited-message channel. The per-user limit stops a friend account from
@@ -52,6 +53,16 @@ async function notifyOfMessage(senderId, recipientId) {
     });
   } catch (err) {
     console.error("Couldn't notify of a message:", err.message);
+  }
+}
+
+// A message that was edited or deleted: tell both people's open pages, which look up the other person's name from the message.
+async function tellAbout(message, senderId, senderName) {
+  try {
+    const other = await User.findById(message.recipient).select("username");
+    if (other) tellBoth(senderName, other.username, senderId, message.recipient);
+  } catch {
+    // a hint that couldn't be sent: the page's own polling still catches up
   }
 }
 
@@ -171,6 +182,7 @@ messagesRouter.post("/with/:username", async (req, res) => {
     body,
   });
   await notifyOfMessage(req.user.id, other._id);
+  tellBoth(req.user.username, other.username, req.user.id, other._id);
   res.status(201).json({ message: toPublicMessage(message, req.user.id) });
 });
 
@@ -189,6 +201,7 @@ messagesRouter.patch("/:id", async (req, res) => {
     message.body = body;
     message.editedAt = new Date();
     await message.save();
+    await tellAbout(message, req.user.id, req.user.username);
   }
   res.json({ message: toPublicMessage(message, req.user.id) });
 });
@@ -199,5 +212,6 @@ messagesRouter.delete("/:id", async (req, res) => {
   const message = await Message.findById(req.params.id);
   if (!message || String(message.sender) !== req.user.id) return res.status(404).json({ error: "Message not found" });
   await message.deleteOne();
+  await tellAbout(message, req.user.id, req.user.username);
   res.status(204).end();
 });

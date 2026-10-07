@@ -20,12 +20,18 @@ const notificationSchema = new mongoose.Schema(
 notificationSchema.pre("save", function () {
   this.$locals.isNewNotification = this.isNew;
 });
+// The same hook tells anyone with the site open that there is something new (see services/liveUpdates.js): a hint with nothing in it.
+const tell = (docs) => import("../services/liveUpdates.js").then((m) => docs.forEach((d) => m.publish(d.recipient, "notification"))).catch((err) => console.error("Live-update hook failed:", err.message));
 const push = (docs) => import("../services/push.js").then((m) => m.queuePush(docs)).catch((err) => console.error("Push hook failed:", err.message));
 notificationSchema.post("save", function (doc) {
-  if (doc.$locals.isNewNotification) push([doc]);
+  if (doc.$locals.isNewNotification) {
+    push([doc]);
+    tell([doc]);
+  }
 });
 notificationSchema.post("insertMany", function (docs) {
   push(docs);
+  tell(docs);
 });
 
 export const Notification = mongoose.model("Notification", notificationSchema);

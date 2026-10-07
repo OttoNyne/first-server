@@ -92,6 +92,19 @@ async function resolveSession(token) {
   return payload;
 }
 
+/**
+ * Whether a sign-in cookie still counts, asked again later by something that outlives one request (the live-updates stream). A cookie that
+ * has been ended (signed out from the list, a password change, the account suspended or deleted) says false. A problem on our side, such as
+ * the database being down, says true: that must not look like a sign-out.
+ */
+export async function sessionIsStillValid(token) {
+  try {
+    return Boolean(await resolveSession(token));
+  } catch (err) {
+    return !["JsonWebTokenError", "TokenExpiredError", "NotBeforeError", "SuspendedError"].includes(err?.name);
+  }
+}
+
 export async function requireAuth(req, res, next) {
   const token = req.cookies?.[AUTH_COOKIE_NAME];
   if (!token) {
