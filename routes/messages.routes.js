@@ -13,7 +13,7 @@ import { cleanBody } from "../utils/blogText.js";
 export const EDIT_WINDOW_MS = 15 * 60 * 1000;
 import { createLimiter } from "../utils/rateLimit.js";
 import { Notification } from "../models/Notification.js";
-import { tellBoth } from "../services/liveUpdates.js";
+import { publish, tellBoth } from "../services/liveUpdates.js";
 
 // Direct messages are friends-only, which is what keeps them from becoming an
 // unsolicited-message channel. The per-user limit stops a friend account from
@@ -27,13 +27,19 @@ const PAGE_SIZE = 50;
 export const messagesRouter = Router();
 messagesRouter.use(requireAuth);
 
-const toPublicMessage = (m, viewerId) => ({
+// Whether these two people show each other when messages were read and when they are typing: both must allow it, so turning it off
+// is also not seeing it (and nobody can tell which of the two it was).
+const sharesStatus = (a, b) => a.chatStatus !== false && b.chatStatus !== false;
+
+// A message as one of its two people sees it. When read receipts are shared the sender sees when it was read; otherwise nobody does
+// (the recipient has no use for it, so it is never sent to them).
+const toPublicMessage = (m, viewerId, receipts = false) => ({
   id: m._id,
   senderId: m.sender,
   recipientId: m.recipient,
   mine: String(m.sender) === String(viewerId),
   body: m.body,
-  readAt: m.readAt,
+  readAt: receipts && String(m.sender) === String(viewerId) ? m.readAt : null,
   createdAt: m.createdAt,
   editedAt: m.editedAt ?? null,
 });
@@ -150,13 +156,17 @@ messagesRouter.get("/with/:username", async (req, res) => {
   const hasMore = newestFirst.length > PAGE_SIZE;
   const page = newestFirst.slice(0, PAGE_SIZE).reverse();
 
-  await Message.updateMany({ sender: other._id, recipient: req.user.id, readAt: null }, { $set: { readAt: new Date() } });
+  const me = await User.findById(req.user.id).select("chatStatus");
+  const receipts = sharesStatus(me ?? {}, other);
+  const marked = await Message.updateMany({ sender: other._id, recipient: req.user.id, readAt: null }, { $set: { readAt: new Date() } });
+  // the other person's open chat shows "Seen" at once, if they are allowed to see it (the hint itself says nothing of that)
+  if (marked.modifiedCount > 0 && receipts) publish(other._id, "message", { with: req.user.username });
   // reading the conversation also clears its notification
   await Notification.updateMany({ recipient: req.user.id, type: "message", "payload.actorId": String(other._id) }, { $set: { isRead: true } });
 
   res.json({
     user: { ...(await toPublicUser(other, req.user.id)), ...activityFor(other, req.user.id, true) },
-    messages: page.map((m) => toPublicMessage(m, req.user.id)),
+    messages: page.map((m) => toPublicMessage(m, req.user.id, receipts)),
     hasMore,
   });
 });
@@ -184,6 +194,24 @@ messagesRouter.post("/with/:username", async (req, res) => {
   await notifyOfMessage(req.user.id, other._id);
   tellBoth(req.user.username, other.username, req.user.id, other._id);
   res.status(201).json({ message: toPublicMessage(message, req.user.id) });
+});
+
+// "Typing…": a hint, kept nowhere, to the other person's open chat, if both people show this to each other. Only friends can send it, it is
+// quietly ignored if sent more than once a second (the page sends at most one every few seconds), and it says the same thing whether or not
+// it went anywhere, so it can't be used to find out the other person's setting.
+const lastTyped = new Map(); // person -> when they last sent one
+const TYPING_MIN_GAP_MS = 1000;
+messagesRouter.post("/with/:username/typing", async (req, res) => {
+  const other = await findFriend(req, res);
+  if (!other) return;
+  const now = Date.now();
+  if (now - (lastTyped.get(req.user.id) ?? 0) >= TYPING_MIN_GAP_MS) {
+    lastTyped.set(req.user.id, now);
+    if (lastTyped.size > 5000) lastTyped.delete(lastTyped.keys().next().value);
+    const me = await User.findById(req.user.id).select("chatStatus");
+    if (sharesStatus(me ?? {}, other)) publish(other._id, "typing", { with: req.user.username });
+  }
+  res.status(204).end();
 });
 
 // Fix a typo in a message you sent, for fifteen minutes after sending it (after that a message can only be deleted, so what the

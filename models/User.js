@@ -53,6 +53,9 @@ const userSchema = new mongoose.Schema(
     // Whether they may be used to connect people: named as a mutual friend, suggested to friends of their friends, and their friends
     // suggested through them (see utils/friendGraph.js). On by default; switching it off keeps who they know to themselves.
     showConnections: { type: Boolean, default: true },
+    // Whether friends can see when this person has read their messages and when they are typing. It is shared, not one-way: with it off they
+    // neither show these to others nor see them (see routes/messages.routes.js).
+    chatStatus: { type: Boolean, default: true },
     // The CSverified badge, in two independent parts: given by an administrator, or earned by having 1,000 active friends (see
     // services/csVerified.js). Neither can be set from a request by the person themselves.
     csVerifiedByAdmin: { type: Boolean, default: false },
@@ -131,7 +134,7 @@ userSchema.methods.comparePassword = function (candidate) {
 userSchema.methods.toPublic = function ({ includeEmail = false } = {}) {
   return {
     id: this._id,
-    ...(includeEmail ? { email: this.email, emailVerified: this.emailVerified, showActivity: this.showActivity !== false, profileViews: this.profileViews === true, showConnections: this.showConnections !== false, isAdmin: isAdminUser(this) } : {}),
+    ...(includeEmail ? { email: this.email, emailVerified: this.emailVerified, showActivity: this.showActivity !== false, profileViews: this.profileViews === true, showConnections: this.showConnections !== false, chatStatus: this.chatStatus !== false, isAdmin: isAdminUser(this) } : {}),
     username: this.username,
     displayName: this.displayName,
     bio: this.bio,
