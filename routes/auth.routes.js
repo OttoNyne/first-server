@@ -4,6 +4,7 @@ import { User } from "../models/User.js";
 import { requireAuth, clearAuthCookie } from "../middleware/auth.js";
 import { endAllSessions, endSessionOf, startSession } from "../services/sessions.js";
 import { signChallenge } from "../services/twoFactor.js";
+import { Passkey } from "../models/Passkey.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { clientIp } from "../utils/clientIp.js";
@@ -242,6 +243,8 @@ authRouter.post("/reset-password", async (req, res) => {
     user.passwordChangedAt = new Date();
     await user.save();
     await endAllSessions(user._id);
+    // Anyone who had got in could have added a passkey, which would outlive this reset: so the way back removes them all.
+    const removedPasskeys = (await Passkey.deleteMany({ user: user._id })).deletedCount;
     await PasswordReset.deleteMany({ user: user._id });
     sendMail({
       to: user.email,
@@ -249,6 +252,7 @@ authRouter.post("/reset-password", async (req, res) => {
       text:
         `Hi ${user.displayName},\n\n` +
         "The password for your CreativesSelect account was just reset. If that was you, there's nothing to do. " +
+        (removedPasskeys ? "Any passkeys on the account were removed too, as a precaution: add them again from your profile settings. " : "") +
         "If it wasn't, reset it again right away.",
     });
     res.status(204).end();

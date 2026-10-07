@@ -14,6 +14,7 @@ import { primaryClientUrl } from "../utils/origins.js";
 import { hashToken } from "../services/emailVerification.js";
 import { checkSecondStep } from "../services/twoFactor.js";
 import { endAllSessions } from "../services/sessions.js";
+import { Passkey } from "../models/Passkey.js";
 
 // Changing the address the account is tied to (it is where password-reset links go, so it is as sensitive as the password). Mounted under /api/auth.
 //
@@ -167,11 +168,11 @@ emailChangeRouter.post("/email/revert", async (req, res) => {
       if (err?.code === 11000) return res.status(409).json({ error: "That address is now used by another account, so it can't be put back. Contact the site's team." });
       throw err;
     }
-    await Promise.all([endAllSessions(user._id), PasswordReset.deleteMany({ user: user._id }), EmailChange.deleteMany({ user: user._id }), EmailVerification.deleteMany({ user: user._id })]);
+    await Promise.all([endAllSessions(user._id), Passkey.deleteMany({ user: user._id }), PasswordReset.deleteMany({ user: user._id }), EmailChange.deleteMany({ user: user._id }), EmailVerification.deleteMany({ user: user._id })]);
     send({
       to: row.oldEmail,
       subject: "Your CreativesSelect email was put back",
-      text: `Hi ${user.displayName},\n\nThe email address of your CreativesSelect account is ${maskEmail(row.oldEmail)} again, and every device was signed out. Use "Forgot password" on the login page to choose a new password.`,
+      text: `Hi ${user.displayName},\n\nThe email address of your CreativesSelect account is ${maskEmail(row.oldEmail)} again, and every device was signed out. Any passkeys were removed too, as a precaution: add them again from your profile settings. Use "Forgot password" on the login page to choose a new password.`,
     });
     res.status(204).end();
   } catch (err) {
