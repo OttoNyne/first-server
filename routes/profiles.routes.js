@@ -11,6 +11,7 @@ import { UsernameHistory } from "../models/UsernameHistory.js";
 import { usernameSchema, displayNameSchema } from "../utils/username.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { deleteAccount } from "../services/accountDeletion.js";
+import { buildExport } from "../services/dataExport.js";
 import { WALLPAPER_MOTIONS, isWallpaperMotion } from "../utils/wallpaperMotion.js";
 import { MAX_LISTENING, MAX_MOOD, checkLine, checkTags, isValidTag, normalizeTag } from "../utils/profileFields.js";
 import { checkHidden, checkOrder } from "../utils/profileSections.js";
@@ -171,6 +172,47 @@ profilesRouter.delete("/me", requireAuth, async (req, res) => {
   await deleteAccount(user._id);
   clearAuthCookie(res);
   res.status(204).end();
+});
+
+// "Download my data": everything the person has written or chosen, as one JSON file (see services/dataExport.js for exactly what is and
+// isn't in it). It holds private things (messages they sent, their email), so, like deleting the account, it asks for the password again
+// (a stolen session alone can't take it), counts wrong passwords, and is limited so it can't be used to keep the server busy.
+const exportPasswordFails = createLimiter({ name: "export-password", limit: 5, windowMs: 15 * 60 * 1000 });
+const exportsPerHour = createLimiter({ name: "export-data", limit: 3, windowMs: 60 * 60 * 1000 });
+
+profilesRouter.post("/me/export", requireAuth, async (req, res) => {
+  try {
+    const { password } = req.body ?? {};
+    if (typeof password !== "string" || !password || password.length > 200) {
+      return res.status(400).json({ error: "Enter your password to download your data" });
+    }
+    if (await exportPasswordFails.isLimited(req.user.id)) {
+      res.set("Retry-After", String(exportPasswordFails.windowSeconds));
+      return res.status(429).json({ error: "Too many attempts — please wait a few minutes and try again" });
+    }
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
+    if (!(await user.comparePassword(password))) {
+      await exportPasswordFails.hit(req.user.id);
+      return res.status(403).json({ error: "Incorrect password" });
+    }
+    if (!(await exportsPerHour.allow(req.user.id))) {
+      res.set("Retry-After", String(exportsPerHour.windowSeconds));
+      return res.status(429).json({ error: "You've already downloaded your data a few times this hour — please try again later." });
+    }
+    const data = await buildExport(user._id);
+    const day = new Date().toISOString().slice(0, 10);
+    res.set({
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Disposition": `attachment; filename="creativesselect-${user.username}-${day}.json"`,
+      // personal data: never kept by a browser cache or anything in between
+      "Cache-Control": "no-store",
+    });
+    res.send(JSON.stringify(data, null, 2));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 async function topFriendsFor(ownerId, viewerId) {
