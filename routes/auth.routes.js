@@ -113,7 +113,7 @@ authRouter.post("/login", async (req, res) => {
     // right, which only /login/2fa accepts, and only together with a code (see routes/twoFactor.routes.js).
     if (user.twoFactor?.enabled) return res.status(200).json({ twoFactorRequired: true, challenge: signChallenge(user) });
 
-    await startSession(req, res, user);
+    await startSession(req, res, user, { notify: true });
     res.status(200).json({ user: await toPublicUser(user, user._id) });
   } catch (err) {
     console.error(err);

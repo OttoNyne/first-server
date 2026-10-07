@@ -83,7 +83,7 @@ twoFactorRouter.post("/login/2fa", async (req, res) => {
     const user = await userForChallenge(parsed.data.challenge);
     if (!user) return res.status(401).json({ error: "That sign-in took too long — please log in again.", code: "challenge_expired" });
     if (!(await secondStepOk(req, res, user, parsed.data.code))) return;
-    await startSession(req, res, user);
+    await startSession(req, res, user, { notify: true });
     const fresh = await User.findById(user._id);
     res.status(200).json({ user: await toPublicUser(fresh, fresh._id), recoveryCodesLeft: fresh.twoFactor.recoveryHashes.length });
   } catch (err) {

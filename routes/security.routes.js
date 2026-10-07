@@ -97,7 +97,8 @@ securityRouter.get("/sessions", requireAuth, async (req, res) => {
     const currentId = await ensureTracked(req, res);
     if (!currentId) return res.status(401).json({ error: "Not authenticated" });
     const sessions = await Session.find({ user: req.user.id }).sort({ lastSeenAt: -1 });
-    res.json({ sessions: sessions.map((s) => show(s, currentId)).sort((a, b) => Number(b.current) - Number(a.current)) });
+    const person = await User.findById(req.user.id).select("signInAlerts");
+    res.json({ sessions: sessions.map((s) => show(s, currentId)).sort((a, b) => Number(b.current) - Number(a.current)), signInAlerts: person?.signInAlerts !== false });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -113,6 +114,18 @@ securityRouter.post("/sessions/end-others", requireAuth, async (req, res) => {
     const { deletedCount } = await Session.deleteMany({ user: req.user.id, _id: { $ne: currentId } });
     await User.updateOne({ _id: req.user.id }, { sessionsRevokedAt: new Date() });
     res.json({ ended: deletedCount });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Whether to be emailed when someone signs in from a browser the person hasn't used before (on by default).
+securityRouter.put("/sign-in-alerts", requireAuth, async (req, res) => {
+  try {
+    if (typeof req.body?.enabled !== "boolean") return res.status(400).json({ error: "Say whether to turn these emails on or off" });
+    await User.updateOne({ _id: req.user.id }, { signInAlerts: req.body.enabled });
+    res.json({ signInAlerts: req.body.enabled });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });

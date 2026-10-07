@@ -76,6 +76,10 @@ const userSchema = new mongoose.Schema(
     passwordChangedAt: { type: Date, default: null },
     // "Sign out everywhere else" was used at this moment: sign-ins from before devices were listed (no row to end) stop working too.
     sessionsRevokedAt: { type: Date, default: null },
+    // Browsers this person has signed in from, as hashes (see services/sessions.js), so a sign-in from somewhere new can be emailed to them.
+    knownDevices: { type: [{ _id: false, hash: String, firstSeen: Date }], default: [] },
+    // Whether to email them about those. On unless they switch it off.
+    signInAlerts: { type: Boolean, default: true },
     // Two-step sign-in (see routes/twoFactor.routes.js). Never returned to anyone. The secret is stored sealed (utils/secretBox.js), recovery
     // codes only as hashes, and lastStep is the newest 30-second step already used, so a code can't be used twice.
     twoFactor: {
