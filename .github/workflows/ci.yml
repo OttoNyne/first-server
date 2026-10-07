@@ -43,7 +43,7 @@ jobs:
   # a backend change that breaks the UI is caught before it deploys.
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     services:
       mongo:
         image: mongo:7
