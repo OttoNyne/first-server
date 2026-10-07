@@ -39,6 +39,7 @@ import { onboardingRouter } from "./routes/onboarding.routes.js";
 import { adminRouter } from "./routes/admin.routes.js";
 import { securityRouter } from "./routes/security.routes.js";
 import { twoFactorRouter } from "./routes/twoFactor.routes.js";
+import { emailChangeRouter } from "./routes/emailChange.routes.js";
 import { requireTrustedOrigin } from "./middleware/csrf.js";
 import { isAllowedOrigin } from "./utils/origins.js";
 
@@ -79,6 +80,7 @@ app.get("/api/hello", (req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/auth", securityRouter);
 app.use("/api/auth", twoFactorRouter);
+app.use("/api/auth", emailChangeRouter);
 app.use("/api/profiles", profilesRouter);
 // commentsRouter must be mounted before postsRouter: it defines the more
 // specific /posts/:postId/comments routes (deliberately public for GET),

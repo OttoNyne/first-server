@@ -39,6 +39,7 @@ import { EmailVerification } from "../models/EmailVerification.js";
 import { deleteAllStoredAssets } from "./storedAssets.js";
 import { PushSubscription } from "../models/PushSubscription.js";
 import { Session } from "../models/Session.js";
+import { EmailChange } from "../models/EmailChange.js";
 
 // Groups the user created: an empty group is deleted; otherwise it is handed
 // to its longest-standing other member (promoted to admin) so other people's
@@ -150,6 +151,7 @@ export async function deleteAccount(userId) {
   await Notification.deleteMany({ $or: [{ recipient: id }, { "payload.actorId": { $in: [String(id), id] } }] });
   await PushSubscription.deleteMany({ user: id }); // the devices that were getting their notifications
   await Session.deleteMany({ user: id }); // and the devices that were signed in
+  await EmailChange.deleteMany({ user: id }); // a change of email in progress, or the way back from one
 
   // Their reports, and reports about them or their content.
   const targetIds = [id, ...postIds, ...comments.map((c) => c._id), ...profileComments.map((c) => c._id), ...mediaComments.map((c) => c._id), ...blogComments.map((c) => c._id), ...eventIds, ...blogIds, ...bulletinIds, ...topicIds, ...replyIds];
