@@ -41,9 +41,23 @@ jobs:
   # The same real-browser suite as the frontend repo (Chrome, Safari's engine
   # WebKit, and an iPhone-sized WebKit), run against THIS commit of the API, so
   # a backend change that breaks the UI is caught before it deploys.
+  # One job per browser, in parallel, so the whole suite takes about as long as its slowest browser rather than all three added together
+  # (together they had grown past thirty minutes). The three jobs don't depend on each other: each has its own database and its own mail
+  # folder, and each test makes its own people.
   e2e:
+    name: e2e (${{ matrix.project }})
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false # a failure in one browser shouldn't hide what the others found
+      matrix:
+        include:
+          - project: chromium
+            engine: chromium
+          - project: webkit
+            engine: webkit
+          - project: iphone
+            engine: webkit
     services:
       mongo:
         image: mongo:7
@@ -84,17 +98,17 @@ jobs:
         run: npm ci
       - name: Install browsers
         working-directory: web/frontend
-        run: npx playwright install --with-deps chromium webkit
+        run: npx playwright install --with-deps ${{ matrix.engine }}
       - name: Browser tests
         working-directory: web/frontend
         env:
           MAIL_OUTBOX_DIR: ${{ runner.temp }}/mail
-        run: npx playwright test
+        run: npx playwright test --project=${{ matrix.project }}
       - name: Keep the report and API log if it failed
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-failure
+          name: e2e-failure-${{ matrix.project }}
           path: |
             web/frontend/playwright-report
             web/frontend/test-results
