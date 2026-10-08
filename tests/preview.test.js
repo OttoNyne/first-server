@@ -101,6 +101,19 @@ describe("link previews and the sitemap", () => {
     expect(new Set(pages).size).toBe(1);
   });
 
+  it("names the www address when the site is reachable on both, because the bare domain only redirects to it", async () => {
+    const before = process.env.CLIENT_URL;
+    process.env.CLIENT_URL = "https://example.com,https://www.example.com";
+    try {
+      await signup(app, "alice");
+      expect((await preview("alice")).text).toContain('rel="canonical" href="https://www.example.com/u/alice"');
+      expect((await request(app).get("/api/preview/sitemap.xml")).text).toContain("<loc>https://www.example.com/</loc>");
+    } finally {
+      if (before === undefined) delete process.env.CLIENT_URL;
+      else process.env.CLIENT_URL = before;
+    }
+  });
+
   it("a name that couldn't be a username gets the home page's preview", async () => {
     const res = await request(app).get("/api/preview/profile/not%20a%20name!").set("x-vercel-forwarded-for", "203.0.113.10");
     expect(res.status).toBe(200);

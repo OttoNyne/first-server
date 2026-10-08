@@ -2,7 +2,7 @@ import { Router } from "express";
 import { User } from "../models/User.js";
 import { clientIp } from "../utils/clientIp.js";
 import { createLimiter } from "../utils/rateLimit.js";
-import { primaryClientUrl } from "../utils/origins.js";
+import { clientOrigins } from "../utils/origins.js";
 import { isLanguage } from "../utils/languages.js";
 import { cleanLine } from "../utils/profileFields.js";
 
@@ -18,6 +18,9 @@ const limiter = createLimiter({ name: "preview", limit: 600, windowMs: 60 * 60 *
 const USERNAME = /^[A-Za-z0-9_]{1,30}$/;
 export const MAX_DESCRIPTION = 200;
 const MAX_SITEMAP = 5000;
+
+/** The address the site is really served on: the one with www when there is one (the bare domain only redirects to it), so links, canonical addresses and the sitemap all name the same host. */
+const publicSite = () => clientOrigins().find((o) => o.startsWith("https://www.")) ?? clientOrigins()[0];
 
 /** Text made safe to put in a page, in an attribute or between tags: nothing in it can be read as markup. */
 export function escapeHtml(value) {
@@ -79,7 +82,7 @@ function send(res, html, { index, maxAge = 300 }) {
 // The preview of one profile: GET /api/preview/profile/:username
 previewRouter.get("/profile/:username", async (req, res) => {
   if (!(await limiter.allow(clientIp(req)))) return res.status(429).type("text/plain").send("Too many requests");
-  const site = primaryClientUrl();
+  const site = publicSite();
   const name = String(req.params.username);
   const home = { title: "CreativesSelect", description: GENERIC, image: `${site}/og-image.png`, url: `${site}/`, target: `${site}/`, index: false };
   if (!USERNAME.test(name)) return send(res, previewPage(home), { index: false });
@@ -101,7 +104,7 @@ previewRouter.get("/profile/:username", async (req, res) => {
 
 // The profiles whose owners have asked to be listed by search engines: GET /api/preview/sitemap.xml
 previewRouter.get("/sitemap.xml", async (req, res) => {
-  const site = primaryClientUrl();
+  const site = publicSite();
   const people = await User.find({ listInSearchEngines: true, isPrivate: { $ne: true }, suspendedAt: null }).sort({ updatedAt: -1 }).limit(MAX_SITEMAP).select("username updatedAt");
   const urls = people.map((p) => `<url><loc>${escapeHtml(`${site}/u/${encodeURIComponent(p.username)}`)}</loc><lastmod>${p.updatedAt.toISOString().slice(0, 10)}</lastmod></url>`);
   res.set({ "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=3600" });
