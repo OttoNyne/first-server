@@ -48,7 +48,7 @@ function personScore(user, words, isFriend) {
   return score + (isFriend ? 15 : 0);
 }
 
-async function searchPeople(me, words, { tag, connection }) {
+async function searchPeople(me, words, { tag, connection, open }) {
   const [blocked, friends] = await Promise.all([blockedUserIds(me), friendIdsOf(me)]);
   const friendIds = [...friends];
   const readable = [{ isPrivate: { $ne: true } }, { _id: { $in: friendIds } }];
@@ -56,6 +56,7 @@ async function searchPeople(me, words, { tag, connection }) {
   const anyWord = (w) => ({ $or: [nameWord(w), { $and: [{ $or: readable }, { $or: [{ tags: { $regex: escapeRegex(w), $options: "i" } }, { bio: { $regex: escapeRegex(w), $options: "i" } }] }] }] });
   const and = [{ suspendedAt: null }, { _id: { $nin: [...blocked, me] } }, ...words.map(anyWord)];
   if (tag) and.push({ tags: tag }, { $or: readable });
+  if (open) and.push({ openToWork: true }, { $or: readable });
   if (connection === "friends") and.push({ _id: { $in: friendIds } });
 
   // the people whose name starts with a word are looked for on their own, so a common word can't push them out of the 200
@@ -161,12 +162,17 @@ searchRouter.get("/", async (req, res) => {
   const parsed = parseQuery(req.query.q);
   if (parsed.error) return res.status(400).json({ error: parsed.error });
 
-  const options = { tag: "", connection: "any" };
+  const options = { tag: "", connection: "any", open: false };
   if (req.query.tag !== undefined && req.query.tag !== "") {
     const tag = normalizeTag(typeof req.query.tag === "string" ? req.query.tag : "");
     if (type !== "people") return res.status(400).json({ error: "Only people can be filtered by tag" });
     if (!isValidTag(tag)) return res.status(400).json({ error: "That isn't a valid tag" });
     options.tag = tag;
+  }
+  if (req.query.open !== undefined && req.query.open !== "") {
+    if (req.query.open !== "1") return res.status(400).json({ error: "open must be 1" });
+    if (type !== "people") return res.status(400).json({ error: "Only people can be filtered by whether they are open to work" });
+    options.open = true;
   }
   if (req.query.connection !== undefined && req.query.connection !== "") {
     if (!CONNECTIONS.includes(req.query.connection)) return res.status(400).json({ error: `connection must be one of: ${CONNECTIONS.join(", ")}` });

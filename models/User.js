@@ -60,6 +60,11 @@ const userSchema = new mongoose.Schema(
     chatStatus: { type: Boolean, default: true },
     // The language the person uses the site in (the page sends it), so what the site emails them is in it too. See utils/emailText.js.
     language: { type: String, enum: LANGUAGES, default: "en" },
+    // Open to work: the person says they take commissions or collaborations, what they offer, and a short note; others can then send them a request
+    // (see routes/workRequests.routes.js). Off by default.
+    openToWork: { type: Boolean, default: false },
+    workOffers: { type: [String], default: [] },
+    workNote: { type: String, default: "", maxlength: 140 },
     // The CSverified badge, in two independent parts: given by an administrator, or earned by having 1,000 active friends (see
     // services/csVerified.js). Neither can be set from a request by the person themselves.
     csVerifiedByAdmin: { type: Boolean, default: false },
@@ -150,6 +155,9 @@ userSchema.methods.toPublic = function ({ includeEmail = false } = {}) {
     mood: this.mood ?? "",
     listeningTo: this.listeningTo ?? "",
     tags: this.tags ?? [],
+    openToWork: this.openToWork === true,
+    workOffers: this.workOffers ?? [],
+    workNote: this.workNote ?? "",
     csVerified: Boolean(this.csVerifiedByAdmin || this.csVerifiedEarned),
     sectionOrder: completeOrder(this.sectionOrder),
     hiddenSections: cleanHidden(this.hiddenSections),

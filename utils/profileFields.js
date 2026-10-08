@@ -30,6 +30,23 @@ export function normalizeTag(value) {
 
 export const isValidTag = (tag) => tag.length >= MIN_TAG && tag.length <= MAX_TAG && TAG.test(tag);
 
+export const MAX_OFFERS = 5;
+export const MAX_WORK_NOTE = 140;
+
+/** What someone offers when they are open to work ("logo design", "mixing"): a list of up to five tag-like words. Returns { value } or { error }. */
+export function checkOffers(list) {
+  if (!Array.isArray(list)) return { error: "workOffers must be a list" };
+  const seen = new Set();
+  for (const raw of list) {
+    if (typeof raw !== "string") return { error: "Each offer must be text" };
+    const offer = normalizeTag(raw);
+    if (!isValidTag(offer)) return { error: `"${cleanLine(raw).slice(0, 30)}" isn't a valid offer — use ${MIN_TAG}–${MAX_TAG} letters, numbers, spaces or hyphens` };
+    seen.add(offer);
+  }
+  if (seen.size > MAX_OFFERS) return { error: `You can list up to ${MAX_OFFERS} things you offer` };
+  return { value: [...seen] };
+}
+
 /** A list of tags: returns { value: [...] } (cleaned, no repeats) or { error }. */
 export function checkTags(list) {
   if (!Array.isArray(list)) return { error: "tags must be a list" };

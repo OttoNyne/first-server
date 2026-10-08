@@ -28,6 +28,7 @@ import { Invite } from "../models/Invite.js";
 import { UsernameHistory } from "../models/UsernameHistory.js";
 import { languageOf } from "../utils/languages.js";
 import { Credit } from "../models/Credit.js";
+import { WorkRequest } from "../models/WorkRequest.js";
 
 // "Download my data": everything a person has written or chosen on the site, as one readable file.
 //
@@ -84,6 +85,10 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
   // the credits you gave on your pieces, and the ones you said yes to on other people's
   const creditsGiven = await rows("creditsGiven", Credit.find({ owner: id }));
   const creditsAccepted = await rows("creditsAccepted", Credit.find({ person: id, status: "accepted" }));
+  // the requests for work you sent, and the answers you gave to the ones sent to you
+  const requestsSent = await rows("workRequestsSent", WorkRequest.find({ from: id }));
+  const requestsAnswered = await rows("workRequestsAnswered", WorkRequest.find({ to: id, status: { $ne: "open" } }));
+  const requestNames = new Map((await User.find({ _id: { $in: [...requestsSent.map((r) => r.to), ...requestsAnswered.map((r) => r.from)] } }).select("username").lean()).map((u) => [String(u._id), u.username]));
   const creditNames = new Map((await User.find({ _id: { $in: [...creditsGiven.map((c) => c.person), ...creditsAccepted.map((c) => c.owner)] } }).select("username").lean()).map((u) => [String(u._id), u.username]));
   const albums = await rows("albums", Album.find({ owner: id }));
   const tracks = await rows("tracks", Track.find({ owner: id }));
@@ -125,6 +130,9 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
       mood: user.mood ?? "",
       listeningTo: user.listeningTo ?? "",
       tags: user.tags ?? [],
+      openToWork: user.openToWork === true,
+      workOffers: user.workOffers ?? [],
+      workNote: text(user.workNote),
       aboutMe: {
         interests: text(user.about?.interests),
         music: text(user.about?.music),
@@ -158,6 +166,10 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
       creditsYouGave: creditsGiven.map((c) => ({ onPiece: String(c.item), person: creditNames.get(String(c.person)) ?? null, role: text(c.role), accepted: c.status === "accepted", added: iso(c.createdAt) })),
       creditsYouAccepted: creditsAccepted.map((c) => ({ onPiece: String(c.item), pieceOf: creditNames.get(String(c.owner)) ?? null, role: text(c.role), added: iso(c.createdAt) })),
       commentsYouWrote: mediaComments.map((c) => ({ id: String(c._id), onPiece: String(c.item), text: text(c.content), pictureUrl: c.imageUrl ?? null, posted: iso(c.createdAt) })),
+    },
+    workRequests: {
+      youSent: requestsSent.map((r) => ({ to: requestNames.get(String(r.to)) ?? null, title: text(r.title), details: text(r.details), budget: text(r.budget), deadline: r.deadline ? iso(r.deadline) : null, status: r.status, theirReply: text(r.reply), sent: iso(r.createdAt) })),
+      youAnswered: requestsAnswered.map((r) => ({ from: requestNames.get(String(r.from)) ?? null, title: text(r.title), accepted: r.status === "accepted", yourReply: text(r.reply), answered: iso(r.answeredAt) })),
     },
     music: tracks.map((t) => ({ id: String(t._id), title: text(t.title), artist: text(t.artist), source: t.sourceType, url: t.url, position: t.position, profileSong: Boolean(t.profileSong), added: iso(t.createdAt) })),
     events: {

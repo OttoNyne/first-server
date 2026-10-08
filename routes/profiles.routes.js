@@ -13,7 +13,7 @@ import { createLimiter } from "../utils/rateLimit.js";
 import { deleteAccount } from "../services/accountDeletion.js";
 import { buildExport } from "../services/dataExport.js";
 import { WALLPAPER_MOTIONS, isWallpaperMotion } from "../utils/wallpaperMotion.js";
-import { MAX_LISTENING, MAX_MOOD, checkLine, checkTags, isValidTag, normalizeTag } from "../utils/profileFields.js";
+import { MAX_LISTENING, MAX_MOOD, MAX_WORK_NOTE, checkLine, checkOffers, checkTags, isValidTag, normalizeTag } from "../utils/profileFields.js";
 import { checkHidden, checkOrder } from "../utils/profileSections.js";
 import { areFriends, blockedUserIds, getProfileForViewer } from "../utils/visibility.js";
 import { activityFor } from "../utils/activity.js";
@@ -76,7 +76,7 @@ profilesRouter.get("/tags", requireAuth, async (req, res) => {
 
 profilesRouter.patch("/me", requireAuth, async (req, res) => {
   const user = await User.findById(req.user.id);
-  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections, showActivity, chatStatus, profileViews, showConnections, language } = req.body;
+  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections, showActivity, chatStatus, profileViews, showConnections, language, openToWork, workOffers, workNote } = req.body;
   const fields = {};
   // the theme is checked before anything is changed, so a bad setting leaves the profile exactly as it was
   const themeChange = theme !== undefined ? checkTheme(theme) : null;
@@ -103,6 +103,20 @@ profilesRouter.patch("/me", requireAuth, async (req, res) => {
     fields.showActivity = showActivity;
     // turning it off also forgets when they were last active
     if (!showActivity) fields.lastActiveAt = null;
+  }
+  if (openToWork !== undefined) {
+    if (typeof openToWork !== "boolean") return res.status(400).json({ error: "openToWork must be true or false" });
+    fields.openToWork = openToWork;
+  }
+  if (workOffers !== undefined) {
+    const offers = checkOffers(workOffers);
+    if (offers.error) return res.status(400).json({ error: offers.error });
+    fields.workOffers = offers.value;
+  }
+  if (workNote !== undefined) {
+    const note = checkLine(workNote, MAX_WORK_NOTE, "The note");
+    if (note.error) return res.status(400).json({ error: note.error });
+    fields.workNote = note.value;
   }
   if (language !== undefined) {
     if (!isLanguage(language)) return res.status(400).json({ error: `language must be one of: ${LANGUAGES.join(", ")}` });
