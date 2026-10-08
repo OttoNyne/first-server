@@ -5,6 +5,8 @@ import { requireAuth } from "../middleware/auth.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { recordStoredAsset, deleteStoredAssetIfUnused } from "../services/storedAssets.js";
 import { getAIProvider, isRealImageProviderConfigured } from "../services/ai/index.js";
+import { User } from "../models/User.js";
+import { languageOf } from "../utils/languages.js";
 
 export const aiRouter = Router();
 aiRouter.use(requireAuth);
@@ -38,7 +40,9 @@ aiRouter.post("/text", async (req, res) => {
     return res.status(429).json({ error: `Text limit reached (${TEXT_LIMIT} per hour) — try again later` });
   }
   try {
-    const result = await getAIProvider().generateText({ prompt: req.body.prompt, kind: req.body.kind });
+    // the text is written in the language the person uses the site in (stored on their account, never taken from the request)
+    const person = await User.findById(req.user.id).select("language");
+    const result = await getAIProvider().generateText({ prompt: req.body.prompt, kind: req.body.kind, language: languageOf(person) });
     res.json(result);
   } catch (err) {
     handleAIError(err, res);

@@ -24,6 +24,8 @@ function aiError(message, status = 502) {
 
 const TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct";
 const MAX_TEXT_CHARS = 300;
+// the language the text is to be written in (English needs no mention: it is what the model does anyway)
+const WRITE_IN = { es: " Write it in Spanish.", ar: " Write it in Arabic." };
 
 const TEXT_INSTRUCTIONS = {
   bio: "Write a short, catchy social-media profile bio (max 160 characters) for a creative person based on the user's topic.",
@@ -54,7 +56,7 @@ export class CloudflareAIProvider extends MockAIProvider {
     this.model = model;
   }
 
-  async generateText({ prompt, kind }) {
+  async generateText({ prompt, kind, language = "en" }) {
     const url = `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/ai/run/${TEXT_MODEL}`;
 
     let res;
@@ -66,7 +68,7 @@ export class CloudflareAIProvider extends MockAIProvider {
           messages: [
             {
               role: "system",
-              content: `${TEXT_INSTRUCTIONS[kind] || TEXT_INSTRUCTIONS.bio} Reply with only the text itself, no quotes or preamble.`,
+              content: `${TEXT_INSTRUCTIONS[kind] || TEXT_INSTRUCTIONS.bio}${WRITE_IN[language] ?? ""} Reply with only the text itself, no quotes or preamble.`,
             },
             { role: "user", content: prompt.slice(0, MAX_TEXT_CHARS) },
           ],

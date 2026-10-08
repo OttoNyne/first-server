@@ -17,9 +17,24 @@ const BLURB_TEMPLATES = [
   "Diving deep into {topic} today.",
 ];
 
+const TEMPLATES = {
+  es: {
+    bio: ["Aquí, haciendo realidad {topic} ✨", "Apasionado de {topic}, siempre creando.", "Vivo por {topic} y las buenas vibras 🌊"],
+    caption: ["{topic} 🔥", "Un pequeño momento de {topic}.", "No dejo de pensar en {topic}."],
+    blurb: ["Todo trata de {topic}: ven a verlo.", "{topic}: la historia hasta ahora.", "Sumergido hoy en {topic}."],
+  },
+  ar: {
+    bio: ["هنا أصنع {topic} ✨", "شغوف بـ{topic} وأبدع دائمًا.", "أعيش من أجل {topic} والأجواء الجميلة 🌊"],
+    caption: ["{topic} 🔥", "لحظة صغيرة من {topic}.", "لا أتوقف عن التفكير في {topic}."],
+    blurb: ["كل شيء هنا عن {topic} — تعالَ وشاهد.", "{topic}: القصة حتى الآن.", "أغوص اليوم في عالم {topic}."],
+  },
+};
+
 const EMOJI = ["✨", "🔥", "🌊", "💫", "🎨"];
 
-function templateFor(kind) {
+function templateFor(kind, language = "en") {
+  const own = TEMPLATES[language];
+  if (own) return kind === "caption" ? own.caption : kind === "blurb" ? own.blurb : own.bio;
   if (kind === "caption") return CAPTION_TEMPLATES;
   if (kind === "blurb") return BLURB_TEMPLATES;
   return BIO_TEMPLATES;
@@ -35,9 +50,9 @@ function hashToColors(input) {
 }
 
 export class MockAIProvider {
-  async generateText({ prompt, kind }) {
+  async generateText({ prompt, kind, language = "en" }) {
     await delay(300 + Math.random() * 300);
-    const templates = templateFor(kind);
+    const templates = templateFor(kind, language);
     const template = templates[Math.floor(Math.random() * templates.length)];
     const emoji = EMOJI[Math.floor(Math.random() * EMOJI.length)];
     return { text: `${template.replace("{topic}", prompt.trim())} ${emoji}` };

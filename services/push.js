@@ -4,6 +4,8 @@ import { User } from "../models/User.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { categoryOf } from "../utils/pushInput.js";
 import { emojiOf } from "../utils/reactionKeys.js";
+import { pushBody } from "../utils/pushText.js";
+import { languageOf } from "../utils/languages.js";
 
 // Push notifications: when someone gets a notification (the bell), the devices they have turned notifications on for get a message too,
 // even with the site closed. Everything here is best effort and never stops the thing that caused the notification.
@@ -41,70 +43,72 @@ export function pushPublicKey() {
 }
 export const isPushEnabled = () => Boolean(pushPublicKey());
 
-const named = (user) => (user?.displayName ? String(user.displayName).replace(/\s+/g, " ").slice(0, 40) : "Someone");
+const SOMEONE = { en: "Someone", es: "Alguien", ar: "شخص ما" };
+const named = (user, recipient) => (user?.displayName ? String(user.displayName).replace(/\s+/g, " ").slice(0, 40) : SOMEONE[languageOf(recipient)]);
 
 /** What to show and where to go for a notification: { body, url, tag }. Names the other person, never what they wrote. */
 export function describePush(n, actor, recipient) {
-  const who = named(actor);
+  const who = named(actor, recipient);
   const p = n.payload ?? {};
   const mine = recipient?.username ? `/u/${recipient.username}` : "/";
   const theirs = actor?.username ? `/u/${actor.username}` : "/";
   const id = (value) => (value ? encodeURIComponent(String(value)) : "");
+  const say = (kind, params = {}) => pushBody(kind, recipient, { who, ...params });
   switch (n.type) {
     case "message": {
-      const count = Number(p.count) > 1 ? `${Math.min(Number(p.count), 99)} messages` : "a message";
-      return { body: `${who} sent you ${count}`, url: actor?.username ? `/messages/${actor.username}` : "/messages", tag: `message-${id(p.actorId)}` };
+      const count = Number(p.count) > 1 ? Math.min(Number(p.count), 99) : 1;
+      return { body: say("message", { count }), url: actor?.username ? `/messages/${actor.username}` : "/messages", tag: `message-${id(p.actorId)}` };
     }
     case "friend_request":
-      return { body: `${who} sent you a friend request`, url: "/friends" };
+      return { body: say("friend_request"), url: "/friends" };
     case "friend_accept":
-      return { body: `${who} accepted your friend request`, url: theirs };
+      return { body: say("friend_accept"), url: theirs };
     case "invite_joined":
-      return { body: `${who} joined with your invite link`, url: "/friends" };
+      return { body: say("invite_joined"), url: "/friends" };
     case "group_invite":
-      return { body: `${who} invited you to a group`, url: p.groupId ? `/groups/${id(p.groupId)}` : "/groups" };
+      return { body: say("group_invite"), url: p.groupId ? `/groups/${id(p.groupId)}` : "/groups" };
     case "friend_birthday":
-      return { body: `${who} has a birthday today`, url: theirs };
+      return { body: say("friend_birthday"), url: theirs };
     case "comment":
-      return { body: `${who} commented on your post`, url: p.postId ? `/posts/${id(p.postId)}` : "/" };
+      return { body: say("comment"), url: p.postId ? `/posts/${id(p.postId)}` : "/" };
     case "profile_comment":
-      return { body: `${who} left a comment on your profile`, url: `${mine}#testimonials` };
+      return { body: say("profile_comment"), url: `${mine}#testimonials` };
     case "media_comment":
-      return { body: `${who} commented on your portfolio`, url: `${mine}#portfolio` };
+      return { body: say("media_comment"), url: `${mine}#portfolio` };
     case "blog_comment":
-      return { body: `${who} commented on your blog entry`, url: p.entryId ? `/blog/${id(p.entryId)}` : "/" };
+      return { body: say("blog_comment"), url: p.entryId ? `/blog/${id(p.entryId)}` : "/" };
     case "reaction": {
       const mark = emojiOf(p.emoji);
       return p.targetType === "post"
-        ? { body: `${who} reacted ${mark} to your post`, url: p.targetId ? `/posts/${id(p.targetId)}` : "/" }
-        : { body: `${who} reacted ${mark} to your portfolio`, url: p.targetId ? `${mine}?piece=${id(p.targetId)}#portfolio` : `${mine}#portfolio` };
+        ? { body: say("reaction_post", { mark }), url: p.targetId ? `/posts/${id(p.targetId)}` : "/" }
+        : { body: say("reaction_portfolio", { mark }), url: p.targetId ? `${mine}?piece=${id(p.targetId)}#portfolio` : `${mine}#portfolio` };
     }
     case "event_created":
-      return { body: `${who} is planning an event`, url: p.eventId ? `/events/${id(p.eventId)}` : "/events" };
+      return { body: say("event_created"), url: p.eventId ? `/events/${id(p.eventId)}` : "/events" };
     case "event_updated":
-      return { body: `${who} changed an event you answered`, url: p.eventId ? `/events/${id(p.eventId)}` : "/events" };
+      return { body: say("event_updated"), url: p.eventId ? `/events/${id(p.eventId)}` : "/events" };
     case "event_cancelled":
-      return { body: `${who} cancelled an event`, url: "/events" };
+      return { body: say("event_cancelled"), url: "/events" };
     case "event_reminder":
-      return { body: "An event you're going to is starting soon", url: p.eventId ? `/events/${id(p.eventId)}` : "/events" };
+      return { body: say("event_reminder"), url: p.eventId ? `/events/${id(p.eventId)}` : "/events" };
     case "live_scheduled":
-      return { body: `${who} scheduled a live`, url: "/live" };
+      return { body: say("live_scheduled"), url: "/live" };
     case "live_reminder":
-      return { body: "A live you asked about is starting soon", url: "/live" };
+      return { body: say("live_reminder"), url: "/live" };
     case "live_started":
-      return { body: `${who} is live now`, url: p.liveId ? `/live/${id(p.liveId)}` : "/live" };
+      return { body: say("live_started"), url: p.liveId ? `/live/${id(p.liveId)}` : "/live" };
     case "blog_post":
-      return { body: `${who} wrote a blog entry`, url: p.entryId ? `/blog/${id(p.entryId)}` : "/" };
+      return { body: say("blog_post"), url: p.entryId ? `/blog/${id(p.entryId)}` : "/" };
     case "help_offer":
-      return { body: `${who} offered to help with your request`, url: "/help-wanted" };
+      return { body: say("help_offer"), url: "/help-wanted" };
     case "help_accepted":
-      return { body: `${who} accepted your offer to help`, url: "/help-wanted" };
+      return { body: say("help_accepted"), url: "/help-wanted" };
     case "report_resolved":
-      return { body: "A moderator looked at your report", url: "/" };
+      return { body: say("report_resolved"), url: "/" };
     case "content_removed":
-      return { body: "A moderator removed something you posted", url: "/" };
+      return { body: say("content_removed"), url: "/" };
     case "cs_verified":
-      return { body: "You're now CSverified", url: mine };
+      return { body: say("cs_verified"), url: mine };
     default:
       return null;
   }
@@ -133,7 +137,7 @@ async function deliver(notifications) {
   const subsOf = new Map();
   for (const s of subs) subsOf.set(String(s.user), [...(subsOf.get(String(s.user)) ?? []), s]);
   const [recipients, actors] = await Promise.all([
-    User.find({ _id: { $in: [...subsOf.keys()] } }).select("username suspendedAt pushPrefs"),
+    User.find({ _id: { $in: [...subsOf.keys()] } }).select("username suspendedAt pushPrefs language"),
     User.find({ _id: { $in: [...new Set(notifications.map((n) => n.payload?.actorId).filter(Boolean))] } }).select("username displayName"),
   ]);
   const recipientOf = new Map(recipients.map((u) => [String(u._id), u]));
@@ -170,7 +174,8 @@ export async function settlePushes() {
 
 /** A test message to all of one person's devices; returns how many accepted it. */
 export async function sendTestPush(userId) {
-  const subs = await PushSubscription.find({ user: userId });
-  const results = await Promise.all(subs.map((sub) => sendOne(sub, { title: TITLE, body: "Notifications are working on this device", url: "/", tag: "test" })));
+  const [subs, person] = await Promise.all([PushSubscription.find({ user: userId }), User.findById(userId).select("language")]);
+  const body = pushBody("test", person);
+  const results = await Promise.all(subs.map((sub) => sendOne(sub, { title: TITLE, body, url: "/", tag: "test" })));
   return results.filter(Boolean).length;
 }
