@@ -26,6 +26,7 @@ import { Reaction } from "../models/Reaction.js";
 import { ScheduledLive } from "../models/ScheduledLive.js";
 import { Invite } from "../models/Invite.js";
 import { UsernameHistory } from "../models/UsernameHistory.js";
+import { languageOf } from "../utils/languages.js";
 
 // "Download my data": everything a person has written or chosen on the site, as one readable file.
 //
@@ -41,6 +42,13 @@ export const MAX_PER_SECTION = 5000;
 
 const iso = (d) => (d ? new Date(d).toISOString() : null);
 const text = (s) => (typeof s === "string" ? s : "");
+
+// The one sentence in the file written for a person (the names of the fields stay English: the file is meant to be read by programs too).
+const ABOUT = {
+  en: "Everything you have written or chosen on CreativesSelect. Other people's words to you (messages, comments on your posts, testimonials on your profile) are not included, because they are theirs; your own words to them are, with their username. Nothing that protects your account (password, two-step secret, sign-ins) is included.",
+  es: "Todo lo que has escrito o elegido en CreativesSelect. Las palabras de otras personas dirigidas a ti (mensajes, comentarios en tus publicaciones, testimonios en tu perfil) no se incluyen, porque son suyas; tus propias palabras para ellas sí, con su nombre de usuario. No se incluye nada de lo que protege tu cuenta (contraseña, secreto de dos pasos, inicios de sesión).",
+  ar: "كل ما كتبته أو اخترته في CreativesSelect. لا يتضمن الملف كلمات الآخرين الموجهة إليك (الرسائل والتعليقات على منشوراتك والشهادات في ملفك الشخصي) لأنها ملك لهم؛ أما كلماتك أنت إليهم فمضمّنة مع اسم المستخدم الخاص بهم. ولا يتضمن الملف أي شيء يحمي حسابك (كلمة المرور وسر الخطوتين وعمليات تسجيل الدخول).",
+};
 
 export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Date() } = {}) {
   const id = new mongoose.Types.ObjectId(userId);
@@ -101,7 +109,7 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
   const out = {
     format: EXPORT_FORMAT,
     exportedAt: iso(now),
-    about: "Everything you have written or chosen on CreativesSelect. Other people's words to you (messages, comments on your posts, testimonials on your profile) are not included, because they are theirs; your own words to them are, with their username. Nothing that protects your account (password, two-step secret, sign-ins) is included.",
+    about: ABOUT[languageOf(user)],
     account: {
       username: user.username,
       displayName: user.displayName,

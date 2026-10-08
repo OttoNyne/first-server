@@ -95,3 +95,35 @@ describe("the language of AI text over the API", () => {
     expect(asked.body.text).toMatch(/[؀-ۿ]/);
   }, 15000);
 });
+
+describe("the data export", () => {
+  let app;
+  beforeAll(async () => {
+    await connectTestDb();
+    ({ app } = await import("../app.js"));
+  });
+  beforeEach(async () => {
+    await clearTestDb();
+  });
+  afterAll(async () => {
+    await clearTestDb();
+    await disconnectTestDb();
+  });
+
+  it("describes itself in the account's language, and keeps its field names", async () => {
+    const { buildExport } = await import("../services/dataExport.js");
+    const { User } = await import("../models/User.js");
+    const make = async (username, language) => {
+      const res = await request(app).post("/api/auth/register").send({ email: `${username}@example.com`, username, password: "password123", displayName: username, language });
+      return res.body.user.id;
+    };
+    const en = await buildExport(await make("exen", "en"));
+    const es = await buildExport(await make("exes", "es"));
+    const ar = await buildExport(await make("exar", "ar"));
+    expect(en.about).toMatch(/^Everything you have written/);
+    expect(es.about).toMatch(/^Todo lo que has escrito/);
+    expect(ar.about).toMatch(/[؀-ۿ]/);
+    for (const file of [en, es, ar]) expect(Object.keys(file)).toEqual(expect.arrayContaining(["format", "exportedAt", "about", "account"]));
+    expect(await User.countDocuments()).toBe(3);
+  }, 20000);
+});
