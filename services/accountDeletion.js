@@ -17,6 +17,7 @@ import { BlogEntry } from "../models/BlogEntry.js";
 import { Bulletin } from "../models/Bulletin.js";
 import { ProfileView } from "../models/ProfileView.js";
 import { Album } from "../models/Album.js";
+import { Credit } from "../models/Credit.js";
 import { GroupTopic } from "../models/GroupTopic.js";
 import { GroupReply } from "../models/GroupReply.js";
 import { Invite } from "../models/Invite.js";
@@ -105,6 +106,7 @@ export async function deleteAccount(userId) {
   const mediaComments = await MediaComment.find({ $or: [{ author: id }, { item: { $in: mediaIds } }] }).select("_id author imageUrl");
   await MediaComment.deleteMany({ _id: { $in: mediaComments.map((c) => c._id) } });
   await releasePictures(mediaComments.filter((c) => String(c.author) !== String(id)));
+  await Credit.deleteMany({ $or: [{ owner: id }, { person: id }] });
   await MediaItem.deleteMany({ owner: id });
   await Album.deleteMany({ owner: id });
   // Events they organised (with every answer to them), and their answers to other people's.

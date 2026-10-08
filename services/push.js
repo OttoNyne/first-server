@@ -107,6 +107,10 @@ export function describePush(n, actor, recipient) {
       return { body: say("report_resolved"), url: "/" };
     case "content_removed":
       return { body: say("content_removed"), url: "/" };
+    case "credit_request":
+      return { body: say("credit_request"), url: `${mine}#portfolio` };
+    case "credit_accepted":
+      return { body: say("credit_accepted"), url: p.itemId ? `${mine}?piece=${id(p.itemId)}#portfolio` : `${mine}#portfolio` };
     case "cs_verified":
       return { body: say("cs_verified"), url: mine };
     default:

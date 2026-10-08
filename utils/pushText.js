@@ -39,6 +39,8 @@ const TEXT = {
   help_accepted: { en: ({ who }) => `${who} accepted your offer to help`, es: ({ who }) => `${who} aceptó tu oferta de ayuda`, ar: ({ who }) => `${who} قبل عرضك للمساعدة` },
   report_resolved: { en: () => "A moderator looked at your report", es: () => "Un moderador revisó tu denuncia", ar: () => "راجع أحد المشرفين بلاغك" },
   content_removed: { en: () => "A moderator removed something you posted", es: () => "Un moderador eliminó algo que publicaste", ar: () => "أزال أحد المشرفين شيئًا نشرته" },
+  credit_request: { en: ({ who }) => `${who} credited you on a piece`, es: ({ who }) => `${who} te dio un crédito en una obra`, ar: ({ who }) => `${who} ذكرك ضمن المشاركين في عمل` },
+  credit_accepted: { en: ({ who }) => `${who} accepted a credit on your piece`, es: ({ who }) => `${who} aceptó un crédito en tu obra`, ar: ({ who }) => `${who} قبل الاعتماد في عملك` },
   cs_verified: { en: () => "You're now CSverified", es: () => "Ya estás verificado en CS", ar: () => "أصبحت الآن موثّقًا في CS" },
   test: { en: () => "Notifications are working on this device", es: () => "Las notificaciones funcionan en este dispositivo", ar: () => "الإشعارات تعمل على هذا الجهاز" },
 };

@@ -27,6 +27,7 @@ import { ScheduledLive } from "../models/ScheduledLive.js";
 import { Invite } from "../models/Invite.js";
 import { UsernameHistory } from "../models/UsernameHistory.js";
 import { languageOf } from "../utils/languages.js";
+import { Credit } from "../models/Credit.js";
 
 // "Download my data": everything a person has written or chosen on the site, as one readable file.
 //
@@ -80,6 +81,10 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
   const bulletins = await rows("bulletins", Bulletin.find({ author: id }));
   const media = await rows("media", MediaItem.find({ owner: id }));
   const mediaComments = await rows("mediaComments", MediaComment.find({ author: id }));
+  // the credits you gave on your pieces, and the ones you said yes to on other people's
+  const creditsGiven = await rows("creditsGiven", Credit.find({ owner: id }));
+  const creditsAccepted = await rows("creditsAccepted", Credit.find({ person: id, status: "accepted" }));
+  const creditNames = new Map((await User.find({ _id: { $in: [...creditsGiven.map((c) => c.person), ...creditsAccepted.map((c) => c.owner)] } }).select("username").lean()).map((u) => [String(u._id), u.username]));
   const albums = await rows("albums", Album.find({ owner: id }));
   const tracks = await rows("tracks", Track.find({ owner: id }));
   const events = await rows("events", Event.find({ host: id }));
@@ -150,6 +155,8 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
     portfolio: {
       albums: albums.map((a) => ({ id: String(a._id), title: text(a.title) })),
       pieces: media.map((m) => ({ id: String(m._id), type: m.type, url: m.url, caption: text(m.caption), madeWithAi: Boolean(m.isAiImage), album: m.album ? String(m.album) : null, added: iso(m.createdAt) })),
+      creditsYouGave: creditsGiven.map((c) => ({ onPiece: String(c.item), person: creditNames.get(String(c.person)) ?? null, role: text(c.role), accepted: c.status === "accepted", added: iso(c.createdAt) })),
+      creditsYouAccepted: creditsAccepted.map((c) => ({ onPiece: String(c.item), pieceOf: creditNames.get(String(c.owner)) ?? null, role: text(c.role), added: iso(c.createdAt) })),
       commentsYouWrote: mediaComments.map((c) => ({ id: String(c._id), onPiece: String(c.item), text: text(c.content), pictureUrl: c.imageUrl ?? null, posted: iso(c.createdAt) })),
     },
     music: tracks.map((t) => ({ id: String(t._id), title: text(t.title), artist: text(t.artist), source: t.sourceType, url: t.url, position: t.position, profileSong: Boolean(t.profileSong), added: iso(t.createdAt) })),

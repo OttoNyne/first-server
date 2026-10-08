@@ -233,7 +233,7 @@ describe("download my data", () => {
     const zoe = await signup("zoe");
     const data = JSON.parse((await download(zoe)).text);
     for (const key of ["posts", "comments", "testimonialsYouWrote", "blogEntries", "blogComments", "bulletins", "music", "messagesYouSent", "tasks", "reactionsYouLeft", "inviteLinks", "cutOff"]) expect(data[key], key).toEqual([]);
-    expect(data.portfolio).toEqual({ albums: [], pieces: [], commentsYouWrote: [] });
+    expect(data.portfolio).toEqual({ albums: [], pieces: [], creditsYouGave: [], creditsYouAccepted: [], commentsYouWrote: [] });
     expect(data.people).toEqual({ friends: [], requestsYouSent: [], topFriends: [], blocked: [] });
     expect(data.account.twoStepSignInOn).toBe(false);
   });
