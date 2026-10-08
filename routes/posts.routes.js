@@ -6,6 +6,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { releasePictures } from "../services/commentPictures.js";
 import { toPublicPost } from "../utils/serialize.js";
 import { assertVisible, getProfileForViewer } from "../utils/visibility.js";
+import { canSeeProfileOf, notifyMentions } from "../services/mentions.js";
 import mongoose from "mongoose";
 import { deleteStoredAssetIfUnused } from "../services/storedAssets.js";
 import { MAX_POST, allowEdit, checkText, cursorFilter } from "../utils/textInput.js";
@@ -119,6 +120,7 @@ postsRouter.post("/", async (req, res) => {
     isAiImage: req.body.isAiImage || false,
   });
   await post.populate("author");
+  await notifyMentions({ text: post.content, actorId: req.user.id, url: `/posts/${post._id}`, canSee: canSeeProfileOf(post.author) });
   res.status(201).json({ post: await toPublicPost(post, 0, req.user.id) });
 });
 
@@ -131,12 +133,14 @@ postsRouter.patch("/:id", async (req, res) => {
   const text = checkText(req.body?.content, MAX_POST, "Posts");
   if (text.error) return res.status(400).json({ error: text.error });
   if (!(await allowEdit(req, res))) return;
+  const beforeText = post.content;
   if (text.value !== post.content) {
     post.content = text.value;
     post.editedAt = new Date();
     await post.save();
   }
   await post.populate("author");
+  await notifyMentions({ text: post.content, before: beforeText, actorId: req.user.id, url: `/posts/${post._id}`, canSee: canSeeProfileOf(post.author) });
   const [withCount] = await withCommentCounts([post], req.user.id);
   res.json({ post: withCount });
 });

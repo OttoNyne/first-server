@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { canSeeAsFriendOf, notifyMentions } from "../services/mentions.js";
 import mongoose from "mongoose";
 import { Bulletin } from "../models/Bulletin.js";
 import { Friendship } from "../models/Friendship.js";
@@ -92,6 +93,7 @@ bulletinsRouter.post("/", requireVerifiedEmail, async (req, res) => {
   }
   const bulletin = await Bulletin.create({ author: req.user.id, title: checked.title, body: checked.body, expireAt: new Date(Date.now() + KEEP_MS) });
   await bulletin.populate("author");
+  await notifyMentions({ text: bulletin.body, actorId: req.user.id, url: "/bulletins", canSee: canSeeAsFriendOf(req.user.id) });
   res.status(201).json({
     bulletin: { id: bulletin._id, title: bulletin.title, body: bulletin.body, createdAt: bulletin.createdAt, editedAt: null, expiresAt: bulletin.expireAt, isMine: true, author: await toPublicUser(bulletin.author, req.user.id) },
   });
@@ -105,6 +107,7 @@ bulletinsRouter.patch("/:id", async (req, res) => {
   const checked = checkBulletin({ title: req.body?.title ?? bulletin.title, body: req.body?.body ?? bulletin.body });
   if (checked.error) return res.status(400).json({ error: checked.error });
   if (!(await allowEdit(req, res))) return;
+  const beforeText = bulletin.body;
   if (checked.title !== bulletin.title || checked.body !== bulletin.body) {
     bulletin.title = checked.title;
     bulletin.body = checked.body;
@@ -112,6 +115,7 @@ bulletinsRouter.patch("/:id", async (req, res) => {
     await bulletin.save();
   }
   await bulletin.populate("author");
+  await notifyMentions({ text: bulletin.body, before: beforeText, actorId: req.user.id, url: "/bulletins", canSee: canSeeAsFriendOf(req.user.id) });
   res.json({
     bulletin: { id: bulletin._id, title: bulletin.title, body: bulletin.body, createdAt: bulletin.createdAt, editedAt: bulletin.editedAt, expiresAt: bulletin.expireAt, isMine: true, author: await toPublicUser(bulletin.author, req.user.id) },
   });

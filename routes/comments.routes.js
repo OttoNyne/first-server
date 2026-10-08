@@ -6,6 +6,7 @@ import { Notification } from "../models/Notification.js";
 import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { toPublicComment } from "../utils/serialize.js";
 import { assertVisible } from "../utils/visibility.js";
+import { canSeeProfileOf, notifyMentions } from "../services/mentions.js";
 import mongoose from "mongoose";
 import { MAX_COMMENT, allowEdit, cursorFilter } from "../utils/textInput.js";
 import { checkComment } from "../utils/commentInput.js";
@@ -67,6 +68,7 @@ commentsRouter.post("/posts/:postId/comments", requireAuth, async (req, res) => 
     });
   }
 
+  await notifyMentions({ text: comment.content, actorId: req.user.id, url: `/posts/${post._id}?comment=${comment._id}`, canSee: canSeeProfileOf(await User.findById(post.author)), skip: [post.author] });
   res.status(201).json({ comment: await toPublicComment(comment, req.user.id) });
 });
 
@@ -79,6 +81,7 @@ commentsRouter.patch("/comments/:id", requireAuth, async (req, res) => {
   const text = await checkComment(req.body, { userId: req.user.id, max: MAX_COMMENT, label: "Comments", current: comment });
   if (text.error) return res.status(400).json({ error: text.error });
   if (!(await allowEdit(req, res))) return;
+  const beforeText = comment.content;
   const takenOff = text.value.imageUrl === null && comment.imageUrl ? comment.imageUrl : null;
   if ((text.value.content !== undefined && text.value.content !== comment.content) || takenOff) {
     if (text.value.content !== undefined) comment.content = text.value.content;
@@ -88,6 +91,8 @@ commentsRouter.patch("/comments/:id", requireAuth, async (req, res) => {
     if (takenOff) await releasePictures([{ author: comment.author, imageUrl: takenOff }]);
   }
   await comment.populate("author");
+  const commentedOn = await Post.findById(comment.post).select("author");
+  if (commentedOn) await notifyMentions({ text: comment.content, before: beforeText, actorId: req.user.id, url: `/posts/${comment.post}?comment=${comment._id}`, canSee: canSeeProfileOf(await User.findById(commentedOn.author)) });
   res.json({ comment: await toPublicComment(comment, req.user.id) });
 });
 

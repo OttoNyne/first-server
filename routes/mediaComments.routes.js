@@ -7,6 +7,7 @@ import { User } from "../models/User.js";
 import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { toPublicComment } from "../utils/serialize.js";
 import { assertVisible, blockedUserIds } from "../utils/visibility.js";
+import { canSeeProfileOf, notifyMentions } from "../services/mentions.js";
 import { MAX_COMMENT, allowEdit, cursorFilter } from "../utils/textInput.js";
 import { checkComment } from "../utils/commentInput.js";
 import { releasePictures } from "../services/commentPictures.js";
@@ -69,6 +70,7 @@ mediaCommentsRouter.post("/:id/comments", requireAuth, async (req, res) => {
       payload: { mediaId: piece.item._id, commentId: comment._id, actorId: req.user.id },
     });
   }
+  await notifyMentions({ text: comment.content, actorId: req.user.id, url: `/u/${piece.owner.username}?piece=${piece.item._id}&comment=${comment._id}#portfolio`, canSee: canSeeProfileOf(piece.owner), skip: [piece.owner._id] });
   res.status(201).json({ comment: await toPublicComment(comment, req.user.id) });
 });
 
@@ -80,6 +82,7 @@ mediaCommentsRouter.patch("/comments/:commentId", requireAuth, async (req, res) 
   const text = await checkComment(req.body, { userId: req.user.id, max: MAX_COMMENT, label: "Comments", current: comment });
   if (text.error) return res.status(400).json({ error: text.error });
   if (!(await allowEdit(req, res))) return;
+  const beforeText = comment.content;
   const takenOff = text.value.imageUrl === null && comment.imageUrl ? comment.imageUrl : null;
   if ((text.value.content !== undefined && text.value.content !== comment.content) || takenOff) {
     if (text.value.content !== undefined) comment.content = text.value.content;
@@ -89,6 +92,9 @@ mediaCommentsRouter.patch("/comments/:commentId", requireAuth, async (req, res) 
     if (takenOff) await releasePictures([{ author: comment.author, imageUrl: takenOff }]);
   }
   await comment.populate("author");
+  const onPiece = await MediaItem.findById(comment.item).select("owner");
+  const pieceOwner = onPiece ? await User.findById(onPiece.owner) : null;
+  if (pieceOwner) await notifyMentions({ text: comment.content, before: beforeText, actorId: req.user.id, url: `/u/${pieceOwner.username}?piece=${comment.item}&comment=${comment._id}#portfolio`, canSee: canSeeProfileOf(pieceOwner) });
   res.json({ comment: await toPublicComment(comment, req.user.id) });
 });
 

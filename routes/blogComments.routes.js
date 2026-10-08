@@ -6,6 +6,7 @@ import { Notification } from "../models/Notification.js";
 import { requireAuth } from "../middleware/auth.js";
 import { toPublicComment } from "../utils/serialize.js";
 import { assertVisible, blockedUserIds } from "../utils/visibility.js";
+import { canSeeProfileOf, notifyMentions } from "../services/mentions.js";
 import { MAX_COMMENT, allowEdit, cursorFilter } from "../utils/textInput.js";
 import { checkComment } from "../utils/commentInput.js";
 import { createLimiter } from "../utils/rateLimit.js";
@@ -61,6 +62,7 @@ blogCommentsRouter.post("/:id/comments", async (req, res) => {
   if (String(entry.author._id) !== req.user.id) {
     await Notification.create({ recipient: entry.author._id, type: "blog_comment", payload: { entryId: String(entry._id), commentId: String(comment._id), actorId: req.user.id, title: entry.title } });
   }
+  await notifyMentions({ text: comment.content, actorId: req.user.id, url: `/blog/${entry._id}?comment=${comment._id}`, canSee: canSeeProfileOf(entry.author), skip: [entry.author._id] });
   res.status(201).json({ comment: await toPublicComment(comment, req.user.id) });
 });
 
@@ -72,6 +74,7 @@ blogCommentsRouter.patch("/comments/:commentId", async (req, res) => {
   const text = await checkComment(req.body, { userId: req.user.id, max: MAX_COMMENT, label: "Comments", current: comment });
   if (text.error) return res.status(400).json({ error: text.error });
   if (!(await allowEdit(req, res))) return;
+  const beforeText = comment.content;
   const takenOff = text.value.imageUrl === null && comment.imageUrl ? comment.imageUrl : null;
   if ((text.value.content !== undefined && text.value.content !== comment.content) || takenOff) {
     if (text.value.content !== undefined) comment.content = text.value.content;
@@ -81,6 +84,8 @@ blogCommentsRouter.patch("/comments/:commentId", async (req, res) => {
     if (takenOff) await releasePictures([{ author: comment.author, imageUrl: takenOff }]);
   }
   await comment.populate("author");
+  const onEntry = await BlogEntry.findById(comment.entry).populate("author");
+  if (onEntry?.author) await notifyMentions({ text: comment.content, before: beforeText, actorId: req.user.id, url: `/blog/${comment.entry}?comment=${comment._id}`, canSee: canSeeProfileOf(onEntry.author) });
   res.json({ comment: await toPublicComment(comment, req.user.id) });
 });
 

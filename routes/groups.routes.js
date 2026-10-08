@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { canSeeInGroup, notifyMentions } from "../services/mentions.js";
 import mongoose from "mongoose";
 import { Group } from "../models/Group.js";
 import { GroupMembership } from "../models/GroupMembership.js";
@@ -162,6 +163,7 @@ groupsRouter.post("/:id/messages", async (req, res) => {
     return res.status(429).json({ error: "You're sending messages too fast — try again in a few minutes." });
   }
   const message = await GroupMessage.create({ group: req.params.id, sender: req.user.id, body });
+  await notifyMentions({ text: message.body, actorId: req.user.id, url: `/groups/${req.params.id}`, canSee: canSeeInGroup(req.params.id) });
   const [out] = await toGroupMessages([message], req.user.id);
   res.status(201).json({ message: out });
 });

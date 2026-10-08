@@ -42,6 +42,7 @@ const TEXT = {
   credit_request: { en: ({ who }) => `${who} credited you on a piece`, es: ({ who }) => `${who} te dio un crédito en una obra`, ar: ({ who }) => `${who} ذكرك ضمن المشاركين في عمل` },
   credit_accepted: { en: ({ who }) => `${who} accepted a credit on your piece`, es: ({ who }) => `${who} aceptó un crédito en tu obra`, ar: ({ who }) => `${who} قبل الاعتماد في عملك` },
   work_request: { en: ({ who }) => `${who} sent you a request for work`, es: ({ who }) => `${who} te envió una solicitud de trabajo`, ar: ({ who }) => `${who} أرسل إليك طلب عمل` },
+  mention: { en: ({ who }) => `${who} mentioned you`, es: ({ who }) => `${who} te mencionó`, ar: ({ who }) => `${who} أشار إليك` },
   work_reply: { en: ({ who }) => `${who} answered your request for work`, es: ({ who }) => `${who} respondió a tu solicitud de trabajo`, ar: ({ who }) => `${who} ردّ على طلب العمل الذي أرسلته` },
   cs_verified: { en: () => "You're now CSverified", es: () => "Ya estás verificado en CS", ar: () => "أصبحت الآن موثّقًا في CS" },
   test: { en: () => "Notifications are working on this device", es: () => "Las notificaciones funcionan en este dispositivo", ar: () => "الإشعارات تعمل على هذا الجهاز" },

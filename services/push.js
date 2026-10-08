@@ -6,6 +6,7 @@ import { categoryOf } from "../utils/pushInput.js";
 import { emojiOf } from "../utils/reactionKeys.js";
 import { pushBody } from "../utils/pushText.js";
 import { languageOf } from "../utils/languages.js";
+import { isSitePath } from "../utils/mentions.js";
 
 // Push notifications: when someone gets a notification (the bell), the devices they have turned notifications on for get a message too,
 // even with the site closed. Everything here is best effort and never stops the thing that caused the notification.
@@ -115,6 +116,8 @@ export function describePush(n, actor, recipient) {
       return { body: say("work_request"), url: `${mine}#work` };
     case "work_reply":
       return { body: say("work_reply"), url: `${mine}#work` };
+    case "mention":
+      return { body: say("mention"), url: isSitePath(p.url) ? p.url : "/" };
     case "cs_verified":
       return { body: say("cs_verified"), url: mine };
     default:

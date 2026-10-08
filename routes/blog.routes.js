@@ -8,6 +8,7 @@ import { releasePictures } from "../services/commentPictures.js";
 import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { requireVerifiedEmail } from "../middleware/requireVerifiedEmail.js";
 import { assertVisible, getProfileForViewer } from "../utils/visibility.js";
+import { canSeeProfileOf, notifyMentions } from "../services/mentions.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { checkEntry, excerptOf } from "../utils/blogText.js";
@@ -99,6 +100,7 @@ blogRouter.post("/", requireVerifiedEmail, async (req, res) => {
   const entry = await BlogEntry.create({ author: req.user.id, title: checked.title, body: checked.body });
   await notifyFriends(entry, req.user.id);
   await entry.populate("author");
+  await notifyMentions({ text: entry.body, actorId: req.user.id, url: `/blog/${entry._id}`, canSee: canSeeProfileOf(entry.author) });
   res.status(201).json({ entry: await full(entry, entry.author, req.user.id) });
 });
 
@@ -113,9 +115,11 @@ blogRouter.put("/:id", async (req, res) => {
     res.set("Retry-After", String(writeLimiter.windowSeconds));
     return res.status(429).json({ error: "You've changed a lot of entries — try again later." });
   }
+  const beforeText = entry.body;
   Object.assign(entry, checked);
   await entry.save();
   await entry.populate("author");
+  await notifyMentions({ text: entry.body, before: beforeText, actorId: req.user.id, url: `/blog/${entry._id}`, canSee: canSeeProfileOf(entry.author) });
   res.json({ entry: await full(entry, entry.author, req.user.id) });
 });
 

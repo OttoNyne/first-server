@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { notifyMentions } from "../services/mentions.js";
 import mongoose from "mongoose";
 import { Event } from "../models/Event.js";
 import { EventRsvp } from "../models/EventRsvp.js";
@@ -142,6 +143,7 @@ eventsRouter.post("/", requireVerifiedEmail, async (req, res) => {
   event.expireAt = expiryOf(event);
   await event.save();
   await announce(event);
+  await notifyMentions({ text: event.description ?? "", actorId: req.user.id, url: `/events/${event._id}`, canSee: async (user) => (await canSee([event], user._id)).length > 0 });
   res.status(201).json({ event: (await serialize([event], req.user.id))[0] });
 });
 
@@ -161,6 +163,7 @@ eventsRouter.patch("/:id", async (req, res) => {
   if (checked.error) return res.status(400).json({ error: checked.error });
   if (!(await allowEdit(req, res))) return;
 
+  const wasDescribed = event.description ?? "";
   const before = { startsAt: event.startsAt.getTime(), endsAt: event.endsAt?.getTime() ?? null, place: event.place, link: event.link, kind: event.kind };
   const changed = Object.entries(checked.value).filter(([key, value]) => {
     const now = value instanceof Date ? value.getTime() : value;
@@ -190,6 +193,7 @@ eventsRouter.patch("/:id", async (req, res) => {
       }
     }
   }
+  await notifyMentions({ text: event.description ?? "", before: wasDescribed, actorId: req.user.id, url: `/events/${event._id}`, canSee: async (user) => (await canSee([event], user._id)).length > 0 });
   res.json({ event: (await serialize([event], req.user.id))[0] });
 });
 

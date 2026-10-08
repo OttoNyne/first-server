@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { canSeeProfileOf, notifyMentions } from "../services/mentions.js";
+import { User } from "../models/User.js";
 import { Task } from "../models/Task.js";
 import { Notification } from "../models/Notification.js";
 import { Block } from "../models/Block.js";
@@ -152,6 +154,7 @@ tasksRouter.post("/", async (req, res) => {
     return res.status(429).json({ error: `Board post limit reached (${POST_LIMIT} per hour) — try again later` });
   }
   const task = await Task.create({ title, description, priority, dueDate, isPublic, owner: req.user.id });
+  if (task.isPublic) await notifyMentions({ text: task.description ?? "", actorId: req.user.id, url: "/help-wanted", canSee: canSeeProfileOf(await User.findById(req.user.id)) });
   res.status(201).json(task);
 });
 
@@ -164,6 +167,7 @@ tasksRouter.put("/:id", async (req, res) => {
   if (req.body.priority !== undefined) updates.priority = req.body.priority;
   if (req.body.dueDate !== undefined) updates.dueDate = req.body.dueDate;
 
+  const prior = await Task.findOne({ _id: req.params.id, owner: req.user.id }).select("title description isPublic");
   const task = await Task.findOneAndUpdate(
     { _id: req.params.id, owner: req.user.id },
     updates,
@@ -172,6 +176,8 @@ tasksRouter.put("/:id", async (req, res) => {
   if (!task) {
     return res.status(404).json({ error: "Task not found" });
   }
+  // only a request on the public board reaches other people, so only its words can name someone
+  if (task.isPublic) await notifyMentions({ text: task.description ?? "", before: prior?.isPublic ? prior.description ?? "" : "", actorId: req.user.id, url: "/help-wanted", canSee: canSeeProfileOf(await User.findById(req.user.id)) });
   res.json(task);
 });
 

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { canSeeInGroup, notifyMentions } from "../services/mentions.js";
 import mongoose from "mongoose";
 import { Group } from "../models/Group.js";
 import { GroupMembership } from "../models/GroupMembership.js";
@@ -105,6 +106,7 @@ groupBoardRouter.post("/:id/topics", async (req, res) => {
     return res.status(429).json({ error: "You've started a lot of topics — try again later." });
   }
   const topic = await GroupTopic.create({ group: req.params.id, author: req.user.id, title: checked.title, body: checked.body, lastActivityAt: new Date() });
+  await notifyMentions({ text: topic.body, actorId: req.user.id, url: `/groups/${req.params.id}`, canSee: canSeeInGroup(req.params.id) });
   const authors = await publicAuthors([topic], req.user.id);
   res.status(201).json({ topic: topicShape(topic, authors, req.user.id) });
 });
@@ -142,6 +144,7 @@ groupBoardRouter.post("/:id/topics/:topicId/replies", async (req, res) => {
   }
   const reply = await GroupReply.create({ topic: topic._id, group: req.params.id, author: req.user.id, body });
   await GroupTopic.updateOne({ _id: topic._id }, { $inc: { replyCount: 1 }, $set: { lastActivityAt: reply.createdAt } });
+  await notifyMentions({ text: reply.body, actorId: req.user.id, url: `/groups/${req.params.id}`, canSee: canSeeInGroup(req.params.id) });
   const authors = await publicAuthors([reply], req.user.id);
   res.status(201).json({ reply: replyShape(reply, authors, req.user.id) });
 });
@@ -155,12 +158,14 @@ groupBoardRouter.patch("/:id/topics/:topicId", async (req, res) => {
   const checked = checkTopic({ title: req.body?.title ?? topic.title, body: req.body?.body ?? topic.body });
   if (checked.error) return res.status(400).json({ error: checked.error });
   if (!(await allowEdit(req, res))) return;
+  const beforeText = topic.body;
   if (checked.title !== topic.title || checked.body !== topic.body) {
     topic.title = checked.title;
     topic.body = checked.body;
     topic.editedAt = new Date();
     await topic.save();
   }
+  await notifyMentions({ text: topic.body, before: beforeText, actorId: req.user.id, url: `/groups/${req.params.id}`, canSee: canSeeInGroup(req.params.id) });
   const authors = await publicAuthors([topic], req.user.id);
   res.json({ topic: topicShape(topic, authors, req.user.id) });
 });
@@ -174,11 +179,13 @@ groupBoardRouter.patch("/:id/topics/:topicId/replies/:replyId", async (req, res)
   if (!body) return res.status(400).json({ error: "Write something to reply" });
   if (body.length > MAX_REPLY_BODY) return res.status(400).json({ error: `Replies can be up to ${MAX_REPLY_BODY} characters` });
   if (!(await allowEdit(req, res))) return;
+  const beforeText = reply.body;
   if (body !== reply.body) {
     reply.body = body;
     reply.editedAt = new Date();
     await reply.save();
   }
+  await notifyMentions({ text: reply.body, before: beforeText, actorId: req.user.id, url: `/groups/${req.params.id}`, canSee: canSeeInGroup(req.params.id) });
   const authors = await publicAuthors([reply], req.user.id);
   res.json({ reply: replyShape(reply, authors, req.user.id) });
 });

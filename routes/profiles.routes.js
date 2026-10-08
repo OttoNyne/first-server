@@ -16,6 +16,7 @@ import { WALLPAPER_MOTIONS, isWallpaperMotion } from "../utils/wallpaperMotion.j
 import { MAX_LISTENING, MAX_MOOD, MAX_WORK_NOTE, checkLine, checkOffers, checkTags, isValidTag, normalizeTag } from "../utils/profileFields.js";
 import { checkHidden, checkOrder } from "../utils/profileSections.js";
 import { areFriends, blockedUserIds, getProfileForViewer } from "../utils/visibility.js";
+import { canSeeProfileOf, notifyMentions } from "../services/mentions.js";
 import { activityFor } from "../utils/activity.js";
 import { ProfileView } from "../models/ProfileView.js";
 import { MAX_COMMENT, allowEdit, checkText, cursorFilter } from "../utils/textInput.js";
@@ -376,6 +377,7 @@ profilesRouter.patch("/comments/:commentId", requireAuth, async (req, res) => {
   const text = await checkComment(req.body, { userId: req.user.id, max: MAX_COMMENT, label: "Testimonials", current: comment });
   if (text.error) return res.status(400).json({ error: text.error });
   if (!(await allowEdit(req, res))) return;
+  const beforeText = comment.content;
   const takenOff = text.value.imageUrl === null && comment.imageUrl ? comment.imageUrl : null;
   if ((text.value.content !== undefined && text.value.content !== comment.content) || takenOff) {
     if (text.value.content !== undefined) comment.content = text.value.content;
@@ -385,6 +387,8 @@ profilesRouter.patch("/comments/:commentId", requireAuth, async (req, res) => {
     if (takenOff) await releasePictures([{ author: comment.author, imageUrl: takenOff }]);
   }
   await comment.populate("author");
+  const wroteOn = await User.findById(comment.profileOwner);
+  if (wroteOn) await notifyMentions({ text: comment.content, before: beforeText, actorId: req.user.id, url: `/u/${wroteOn.username}#testimonials`, canSee: canSeeProfileOf(wroteOn) });
   res.json({ comment: await toPublicComment(comment, req.user.id) });
 });
 
@@ -415,6 +419,7 @@ profilesRouter.post("/:username/comments", requireAuth, async (req, res) => {
       payload: { commentId: comment._id, actorId: req.user.id },
     });
   }
+  await notifyMentions({ text: comment.content, actorId: req.user.id, url: `/u/${owner.username}#testimonials`, canSee: canSeeProfileOf(owner), skip: [owner._id] });
   res.status(201).json({ comment: await toPublicComment(comment, req.user.id) });
 });
 
