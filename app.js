@@ -17,6 +17,7 @@ import { mediaRouter } from "./routes/media.routes.js";
 import { creditsRouter } from "./routes/credits.routes.js";
 import { workRequestsRouter } from "./routes/workRequests.routes.js";
 import { previewRouter } from "./routes/preview.routes.js";
+import { challengesRouter } from "./routes/challenges.routes.js";
 import { mediaCommentsRouter } from "./routes/mediaComments.routes.js";
 import { eventsRouter } from "./routes/events.routes.js";
 import { aboutRouter } from "./routes/about.routes.js";
@@ -104,6 +105,8 @@ app.use("/api/media", mediaRouter);
 app.use("/api/credits", creditsRouter);
 app.use("/api/work-requests", workRequestsRouter);
 app.use("/api/preview", previewRouter);
+// the challenge gallery can be looked at without signing in, so it goes before moderationRouter
+app.use("/api/challenges", challengesRouter);
 app.use("/api/media", mediaCommentsRouter);
 app.use("/api/events", eventsRouter);
 app.use("/api/about", aboutRouter);

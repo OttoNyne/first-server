@@ -28,6 +28,7 @@ import { Invite } from "../models/Invite.js";
 import { UsernameHistory } from "../models/UsernameHistory.js";
 import { languageOf } from "../utils/languages.js";
 import { Credit } from "../models/Credit.js";
+import { ChallengeEntry } from "../models/ChallengeEntry.js";
 import { WorkRequest } from "../models/WorkRequest.js";
 
 // "Download my data": everything a person has written or chosen on the site, as one readable file.
@@ -85,6 +86,7 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
   // the credits you gave on your pieces, and the ones you said yes to on other people's
   const creditsGiven = await rows("creditsGiven", Credit.find({ owner: id }));
   const creditsAccepted = await rows("creditsAccepted", Credit.find({ person: id, status: "accepted" }));
+  const challengeEntries = await rows("challengeEntries", ChallengeEntry.find({ user: id }));
   // the requests for work you sent, and the answers you gave to the ones sent to you
   const requestsSent = await rows("workRequestsSent", WorkRequest.find({ from: id }));
   const requestsAnswered = await rows("workRequestsAnswered", WorkRequest.find({ to: id, status: { $ne: "open" } }));
@@ -166,6 +168,7 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
       pieces: media.map((m) => ({ id: String(m._id), type: m.type, url: m.url, caption: text(m.caption), madeWithAi: Boolean(m.isAiImage), album: m.album ? String(m.album) : null, added: iso(m.createdAt) })),
       creditsYouGave: creditsGiven.map((c) => ({ onPiece: String(c.item), person: creditNames.get(String(c.person)) ?? null, role: text(c.role), accepted: c.status === "accepted", added: iso(c.createdAt) })),
       creditsYouAccepted: creditsAccepted.map((c) => ({ onPiece: String(c.item), pieceOf: creditNames.get(String(c.owner)) ?? null, role: text(c.role), added: iso(c.createdAt) })),
+      challengeEntries: challengeEntries.map((e) => ({ week: e.week, piece: String(e.item), entered: iso(e.createdAt) })),
       commentsYouWrote: mediaComments.map((c) => ({ id: String(c._id), onPiece: String(c.item), text: text(c.content), pictureUrl: c.imageUrl ?? null, posted: iso(c.createdAt) })),
     },
     workRequests: {

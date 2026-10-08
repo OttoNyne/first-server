@@ -17,6 +17,7 @@ import { MAX_VIDEO_SECONDS, parseStartSeconds, parseVideoLink } from "../utils/v
 import { checkCaption } from "../utils/mediaCaption.js";
 import { checkEmoji, forgetReactions, notifyOfReaction, setReaction, summarise } from "../utils/reactions.js";
 import { Credit } from "../models/Credit.js";
+import { ChallengeEntry } from "../models/ChallengeEntry.js";
 import { Notification } from "../models/Notification.js";
 import { creditsForItems } from "./credits.routes.js";
 
@@ -219,6 +220,7 @@ mediaRouter.delete("/:id", requireAuth, async (req, res) => {
   await item.deleteOne();
   await forgetReactions("media", [item._id]);
   await Credit.deleteMany({ item: item._id });
+  await ChallengeEntry.deleteMany({ item: item._id });
   await Notification.deleteMany({ type: { $in: ["credit_request", "credit_accepted"] }, "payload.itemId": String(item._id) });
   const withPictures = await MediaComment.find({ item: item._id, imageUrl: { $ne: null } });
   await MediaComment.deleteMany({ item: item._id });
