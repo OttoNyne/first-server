@@ -133,6 +133,7 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
       openToWork: user.openToWork === true,
       workOffers: user.workOffers ?? [],
       workNote: text(user.workNote),
+      listInSearchEngines: user.listInSearchEngines === true,
       aboutMe: {
         interests: text(user.about?.interests),
         music: text(user.about?.music),

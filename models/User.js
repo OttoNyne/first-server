@@ -65,6 +65,9 @@ const userSchema = new mongoose.Schema(
     openToWork: { type: Boolean, default: false },
     workOffers: { type: [String], default: [] },
     workNote: { type: String, default: "", maxlength: 140 },
+    // Whether search engines may list this profile (see routes/preview.routes.js). Off by default: a public profile can be opened by anyone with the
+    // link, but is not put forward to be found unless its owner says so.
+    listInSearchEngines: { type: Boolean, default: false },
     // The CSverified badge, in two independent parts: given by an administrator, or earned by having 1,000 active friends (see
     // services/csVerified.js). Neither can be set from a request by the person themselves.
     csVerifiedByAdmin: { type: Boolean, default: false },
@@ -158,6 +161,7 @@ userSchema.methods.toPublic = function ({ includeEmail = false } = {}) {
     openToWork: this.openToWork === true,
     workOffers: this.workOffers ?? [],
     workNote: this.workNote ?? "",
+    listInSearchEngines: this.listInSearchEngines === true,
     csVerified: Boolean(this.csVerifiedByAdmin || this.csVerifiedEarned),
     sectionOrder: completeOrder(this.sectionOrder),
     hiddenSections: cleanHidden(this.hiddenSections),

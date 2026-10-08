@@ -76,7 +76,7 @@ profilesRouter.get("/tags", requireAuth, async (req, res) => {
 
 profilesRouter.patch("/me", requireAuth, async (req, res) => {
   const user = await User.findById(req.user.id);
-  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections, showActivity, chatStatus, profileViews, showConnections, language, openToWork, workOffers, workNote } = req.body;
+  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections, showActivity, chatStatus, profileViews, showConnections, language, openToWork, workOffers, workNote, listInSearchEngines } = req.body;
   const fields = {};
   // the theme is checked before anything is changed, so a bad setting leaves the profile exactly as it was
   const themeChange = theme !== undefined ? checkTheme(theme) : null;
@@ -103,6 +103,10 @@ profilesRouter.patch("/me", requireAuth, async (req, res) => {
     fields.showActivity = showActivity;
     // turning it off also forgets when they were last active
     if (!showActivity) fields.lastActiveAt = null;
+  }
+  if (listInSearchEngines !== undefined) {
+    if (typeof listInSearchEngines !== "boolean") return res.status(400).json({ error: "listInSearchEngines must be true or false" });
+    fields.listInSearchEngines = listInSearchEngines;
   }
   if (openToWork !== undefined) {
     if (typeof openToWork !== "boolean") return res.status(400).json({ error: "openToWork must be true or false" });

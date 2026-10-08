@@ -5,7 +5,7 @@ import { Friendship } from "../models/Friendship.js";
 import { Notification } from "../models/Notification.js";
 import { BlogComment } from "../models/BlogComment.js";
 import { releasePictures } from "../services/commentPictures.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { requireVerifiedEmail } from "../middleware/requireVerifiedEmail.js";
 import { assertVisible, getProfileForViewer } from "../utils/visibility.js";
 import { toPublicUser } from "../utils/serialize.js";
@@ -14,6 +14,24 @@ import { checkEntry, excerptOf } from "../utils/blogText.js";
 
 // Blog / journal entries: longer writing on a profile. Reading follows the profile's own visibility rules exactly.
 export const blogRouter = Router();
+// Someone's list of entries is read like the rest of their profile (a public profile can be read without signing in), so it comes first;
+// everything else about the blog needs a sign-in.
+blogRouter.get("/user/:username", attachUserIfPresent, async (req, res) => {
+  try {
+    const user = await getProfileForViewer(req.params.username, req.user?.id);
+    const page = Math.min(50, Math.max(1, Number.parseInt(req.query.page, 10) || 1));
+    const found = await BlogEntry.find({ author: user._id })
+      .sort({ createdAt: -1, _id: -1 })
+      .skip((page - 1) * PAGE)
+      .limit(PAGE + 1);
+    const entries = found.slice(0, PAGE);
+    const counts = new Map((await BlogComment.aggregate([{ $match: { entry: { $in: entries.map((e) => e._id) } } }, { $group: { _id: "$entry", n: { $sum: 1 } } }])).map((c) => [String(c._id), c.n]));
+    res.json({ entries: entries.map((e) => summary(e, counts.get(String(e._id)) ?? 0)), page, hasMore: found.length > PAGE });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
 blogRouter.use(requireAuth);
 
 const PAGE = 10;
@@ -54,23 +72,6 @@ export async function removeBlogComments(entryIds) {
   await BlogComment.deleteMany({ entry: { $in: entryIds } });
   await releasePictures(withPictures);
 }
-
-// Someone's entries, newest first, ten at a time. Same gate as the rest of their profile.
-blogRouter.get("/user/:username", async (req, res) => {
-  try {
-    const user = await getProfileForViewer(req.params.username, req.user.id);
-    const page = Math.min(50, Math.max(1, Number.parseInt(req.query.page, 10) || 1));
-    const found = await BlogEntry.find({ author: user._id })
-      .sort({ createdAt: -1, _id: -1 })
-      .skip((page - 1) * PAGE)
-      .limit(PAGE + 1);
-    const entries = found.slice(0, PAGE);
-    const counts = new Map((await BlogComment.aggregate([{ $match: { entry: { $in: entries.map((e) => e._id) } } }, { $group: { _id: "$entry", n: { $sum: 1 } } }])).map((c) => [String(c._id), c.n]));
-    res.json({ entries: entries.map((e) => summary(e, counts.get(String(e._id)) ?? 0)), page, hasMore: found.length > PAGE });
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
-  }
-});
 
 // One entry. If its author's profile isn't visible to you it answers 404, exactly as if the entry did not exist.
 blogRouter.get("/:id", async (req, res) => {

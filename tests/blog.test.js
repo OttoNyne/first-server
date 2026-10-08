@@ -34,8 +34,11 @@ describe("blog entries", () => {
   const notes = async (who) => (await who.agent.get("/api/notifications")).body.notifications.filter((n) => n.type === "blog_post");
 
   describe("writing", () => {
-    it("needs a sign-in", async () => {
-      expect((await request(app).get("/api/blog/user/alice")).status).toBe(401);
+    it("needs a sign-in to write or to read a single entry, but a public profile's list can be read without one", async () => {
+      const alice = await signup(app, "alice");
+      expect((await request(app).get("/api/blog/user/alice")).status).toBe(200); // a public profile, read like the rest of it
+      await alice.agent.patch("/api/profiles/me").send({ isPrivate: true });
+      expect((await request(app).get("/api/blog/user/alice")).status).toBe(403); // a private one is not
       expect((await request(app).get("/api/blog/5f1d7f3b8f1d7f3b8f1d7f3b")).status).toBe(401);
       expect((await request(app).post("/api/blog").send({})).status).toBe(401);
     });
