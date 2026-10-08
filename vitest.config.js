@@ -2,6 +2,10 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    // Hashing at the real cost is most of what a test run spends its time on; tests don't need it (see utils/passwordCost.js).
+    env: { BCRYPT_COST: "4" },
+    // With LOCAL_MONGO set (npm run test:local) starts a MongoDB on this computer for the run; otherwise does nothing.
+    globalSetup: ["./tests/helpers/localMongo.js"],
     // Every test file shares one MongoDB database (creativeselect_test),
     // and each file's own beforeEach wipes every collection in it. Running
     // files in parallel (Vitest's default) lets one file's clearTestDb()

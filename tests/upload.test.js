@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 import request from "supertest";
 import { Writable } from "stream";
 import { connectTestDb, clearTestDb, disconnectTestDb } from "./helpers/testDb.js";
@@ -147,5 +147,70 @@ describe("POST /api/media/upload", () => {
     expect(res.status).toBe(502);
     expect(res.body.error).toMatch(/try again/i);
     expect(JSON.stringify(res.body)).not.toMatch(/secret-internal-detail|api_key/);
+  });
+
+  describe("size limits: a minute of video gets more room than a picture, and a file over its limit is cut off as it arrives", () => {
+    let limits;
+    beforeAll(async () => {
+      ({ UPLOAD_LIMITS: limits } = await import("../middleware/upload.js"));
+    });
+    const saved = {};
+    beforeEach(() => Object.assign(saved, limits));
+    afterEach(() => Object.assign(limits, saved));
+    const bytes = (n) => Buffer.alloc(n, 1);
+    const sendBytes = (n, type, purpose = "portfolio", name = "file.bin") => agent.post(`/api/media/upload?purpose=${purpose}`).attach("file", bytes(n), { filename: name, contentType: type });
+    const ok = () => ({ result: { secure_url: "https://res.cloudinary.com/demo/x.mp4", public_id: "creativeselect/portfolio/x", bytes: 1, duration: 10 } });
+
+    it("has a bigger limit for video than for anything else, and the real numbers are what the plan allows", () => {
+      expect(limits.video).toBe(100 * 1024 * 1024);
+      expect(limits.other).toBe(30 * 1024 * 1024);
+      expect(limits.video).toBeGreaterThan(limits.other);
+    });
+
+    it("lets a video through that a picture of the same size could not be", async () => {
+      limits.other = 2_000;
+      limits.video = 20_000;
+      nextResult = ok;
+      expect((await sendBytes(10_000, "video/mp4", "portfolio", "clip.mp4")).status).toBe(201);
+      nextResult = ok;
+      const picture = await sendBytes(10_000, "image/png", "portfolio", "pic.png");
+      expect(picture.status).toBe(413);
+      expect(picture.body.error).toMatch(/too large/i);
+    });
+
+    it("refuses a video over its own limit with a message about video, stores nothing, and records nothing", async () => {
+      limits.video = 5_000;
+      nextResult = ok;
+      const res = await sendBytes(50_000, "video/mp4", "portfolio", "clip.mp4");
+      expect(res.status).toBe(413);
+      expect(res.body.error).toMatch(/video is too large/i);
+      expect(res.body.error).toMatch(/MB/);
+      expect(await StoredAsset.countDocuments()).toBe(0);
+    });
+
+    it("applies the lower limit to audio and to pictures for every purpose, not just the portfolio", async () => {
+      limits.other = 3_000;
+      limits.video = 30_000;
+      for (const [purpose, type, name] of [["avatars", "image/png", "a.png"], ["wallpapers", "image/jpeg", "w.jpg"], ["tracks", "audio/mpeg", "t.mp3"], ["comments", "image/png", "c.png"]]) {
+        nextResult = ok;
+        const res = await sendBytes(10_000, type, purpose, name);
+        expect(res.status, purpose).toBe(413);
+      }
+      expect(await StoredAsset.countDocuments()).toBe(0);
+    });
+
+    it("still answers promptly after cutting a file off, and the next upload works", async () => {
+      limits.other = 1_000;
+      nextResult = ok;
+      expect((await sendBytes(200_000, "image/png", "portfolio", "big.png")).status).toBe(413);
+      nextResult = ok;
+      expect((await sendBytes(500, "image/png", "portfolio", "small.png")).status).toBe(201);
+    });
+
+    it("accepts a file exactly at its limit", async () => {
+      limits.other = 4_000;
+      nextResult = ok;
+      expect((await sendBytes(4_000, "image/png", "portfolio", "exact.png")).status).toBe(201);
+    });
   });
 });

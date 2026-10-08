@@ -23,7 +23,7 @@ export function errorHandler(err, req, res, next) {
   // — same reasoning as CastError above, a client mistake, not a server one.
   if (err.name === "MulterError") {
     const message =
-      err.code === "LIMIT_FILE_SIZE" ? "File exceeds the 30MB upload limit" : err.message;
+      err.code === "LIMIT_FILE_SIZE" ? "That file is too large to upload." : err.message;
     return res.status(413).json({ error: message });
   }
   console.error(err);

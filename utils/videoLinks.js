@@ -1,8 +1,8 @@
-// Portfolio videos are limited to 30 seconds. Uploads are measured by the
+// Portfolio videos are limited to a minute. Uploads are measured by the
 // storage provider; links can't be measured (we never download them), so a
-// linked video is *played* as a 30-second window: a YouTube embed gets
-// `start`/`end` parameters, a direct file is paused at start + 30 s.
-export const MAX_VIDEO_SECONDS = 30;
+// linked video is *played* as a window of that length: a YouTube embed gets
+// `start`/`end` parameters, a direct file is paused at start + 60 s.
+export const MAX_VIDEO_SECONDS = 60;
 
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be", "www.youtu.be"]);
 const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;

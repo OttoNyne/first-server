@@ -177,7 +177,7 @@ describe("portfolio reactions and videos", () => {
     });
   });
 
-  describe("video uploads (30 seconds max)", () => {
+  describe("video uploads (a minute max)", () => {
     let agent;
     let userId;
     beforeEach(async () => {
@@ -191,26 +191,26 @@ describe("portfolio reactions and videos", () => {
       result: { secure_url: `https://res.cloudinary.com/demo/video/upload/v1/${id}.mp4`, public_id: id, bytes: 100, duration, resource_type: "video" },
     });
 
-    it("accepts a video of 30 seconds or less and records it as the user's upload", async () => {
-      nextResult = cloudinaryResult(12.4);
+    it("accepts a video of a minute or less and records it as the user's upload", async () => {
+      nextResult = cloudinaryResult(41.4);
       const res = await sendVideo();
       expect(res.status).toBe(201);
-      expect(res.body.mediaItem).toMatchObject({ type: "video", durationSeconds: 12.4 });
+      expect(res.body.mediaItem).toMatchObject({ type: "video", durationSeconds: 41.4 });
       expect(await m.StoredAsset.findOne({ owner: userId })).toMatchObject({ kind: "upload", resourceType: "video" });
     });
 
-    it("accepts exactly 30 seconds, and phone-style QuickTime files", async () => {
-      nextResult = cloudinaryResult(30);
+    it("accepts exactly 60 seconds, and phone-style QuickTime files", async () => {
+      nextResult = cloudinaryResult(60);
       expect((await sendVideo()).status).toBe(201);
-      nextResult = cloudinaryResult(30.4, "creativeselect/portfolio/clip2");
+      nextResult = cloudinaryResult(60.4, "creativeselect/portfolio/clip2");
       expect((await sendVideo("portfolio", "video/quicktime", "IMG_0001.MOV")).status).toBe(201);
     });
 
     it("rejects a longer video, removes the stored file, and creates nothing", async () => {
-      nextResult = cloudinaryResult(42.7);
+      nextResult = cloudinaryResult(72.7);
       const res = await sendVideo();
       expect(res.status).toBe(400);
-      expect(res.body.error).toMatch(/30 seconds.*43 seconds/);
+      expect(res.body.error).toMatch(/60 seconds.*73 seconds/);
       expect(destroy).toHaveBeenCalledWith("creativeselect/portfolio/clip1", { resource_type: "video", invalidate: true });
       expect(await m.MediaItem.countDocuments()).toBe(0);
       expect(await m.StoredAsset.countDocuments()).toBe(0);

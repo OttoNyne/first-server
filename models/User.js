@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
+import { passwordCost } from "../utils/passwordCost.js";
 import { WALLPAPER_MOTIONS } from "../utils/wallpaperMotion.js";
 import { cleanHidden, completeOrder } from "../utils/profileSections.js";
 import { isAdminUser } from "../utils/admin.js";
@@ -122,7 +123,7 @@ userSchema.virtual("password").set(function (value) {
 
 userSchema.pre("validate", async function () {
   if (!this._plainPassword) return;
-  this.passwordHash = await bcrypt.hash(this._plainPassword, 12);
+  this.passwordHash = await bcrypt.hash(this._plainPassword, passwordCost());
 });
 
 userSchema.methods.comparePassword = function (candidate) {

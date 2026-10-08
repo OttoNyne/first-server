@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:local": "node scripts/test-local.mjs",
+    "e2e-api": "node scripts/e2e-api.mjs"
   },
   "keywords": [],
   "type": "module",
@@ -27,6 +29,7 @@
     "zod": "^4.6.2"
   },
   "devDependencies": {
+    "mongodb-memory-server": "^11.3.0",
     "supertest": "^7.3.1",
     "vitest": "^5.0.2"
   }

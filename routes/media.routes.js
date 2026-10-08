@@ -23,7 +23,7 @@ export const mediaRouter = Router();
 export const MAX_PORTFOLIO = 200;
 
 // Cloudinary reports the duration of a video it has just ingested; allow a
-// little rounding slack over the 30-second limit.
+// little rounding slack over the length limit (utils/videoLinks.js).
 const DURATION_SLACK_SECONDS = 0.75;
 
 mediaRouter.post("/upload", requireAuth, upload.single("file"), async (req, res) => {
@@ -57,7 +57,7 @@ mediaRouter.post("/upload", requireAuth, upload.single("file"), async (req, res)
     return res.status(400).json({ error: caption.error });
   }
 
-  // Portfolio videos are limited to 30 seconds. The duration is only known
+  // Portfolio videos are limited in length (MAX_VIDEO_SECONDS). The duration is only known
   // once the storage provider has the file, so check it now and remove the
   // file again if it's too long.
   if (isPortfolio && isVideo) {

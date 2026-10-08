@@ -40,10 +40,17 @@ The server listens on port 5000 (override with `PORT`) and logs
 ## Tests
 
 ```bash
-npm test
+npm test              # against the database in your .env (slow if it is a cloud one)
+npm run test:local    # against a MongoDB on this computer: about 3.5 minutes, the whole suite
+npm run test:local -- tests/auth.test.js   # just one file
+npm run e2e-api       # the API for the browser tests (frontend repo), on its own local database
 ```
 
-Runs the Vitest + Supertest suite (1071 tests: auth incl. throttling/CSRF/session
+The first `test:local` or `e2e-api` downloads the MongoDB program once (about 590 MB, into your user cache folder);
+after that it starts in about a second. Tests lower the password hashing cost (`BCRYPT_COST`) to run faster; that
+setting is ignored in production.
+
+Runs the Vitest + Supertest suite (1082 tests: auth incl. throttling/CSRF/session
 revocation, Tasks CRUD and the Help wanted board, friends, blocking, groups, media,
 profile editing, portfolio reactions and videos, account deletion, password change, uploads,
 stored-asset cleanup)
