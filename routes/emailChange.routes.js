@@ -9,6 +9,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { clientIp } from "../utils/clientIp.js";
 import { mailAvailable, sendMail } from "../utils/mailer.js";
+import { emailFor } from "../utils/emailText.js";
 import { maskEmail } from "../utils/maskEmail.js";
 import { primaryClientUrl } from "../utils/origins.js";
 import { hashToken } from "../services/emailVerification.js";
@@ -88,13 +89,11 @@ emailChangeRouter.post("/email/change", requireAuth, async (req, res) => {
     // the link goes in the fragment, which browsers never send to a server or in a Referer
     send({
       to: newEmail,
-      subject: "Confirm your new CreativesSelect email",
-      text: `Hi ${user.displayName},\n\nSomeone asked to use this address for the CreativesSelect account "${user.username}". To confirm it is yours and make the change, open this link within an hour:\n\n${baseUrl()}/confirm-email-change#token=${token}\n\nIf you didn't ask for this, ignore this email: nothing will change.`,
+      ...emailFor("emailChangeConfirm", user, { name: user.displayName, username: user.username, link: `${baseUrl()}/confirm-email-change#token=${token}` }),
     });
     send({
       to: user.email,
-      subject: "A change of email was asked for on your CreativesSelect account",
-      text: `Hi ${user.displayName},\n\nSomeone who knew your password asked to change the email address of your CreativesSelect account to ${maskEmail(newEmail)}. Nothing has changed yet: it only changes if the link sent to that address is opened within an hour.\n\nIf that was you, there's nothing to do. If it wasn't, change your password right away from your profile settings.`,
+      ...emailFor("emailChangeAsked", user, { name: user.displayName, masked: maskEmail(newEmail) }),
     });
     res.status(204).end();
   } catch (err) {
@@ -136,8 +135,7 @@ emailChangeRouter.post("/email/confirm", async (req, res) => {
     await EmailChange.updateOne({ _id: row._id }, { kind: "revertible", tokenHash: hashToken(revertToken), expireAt: new Date(Date.now() + REVERT_MS) });
     send({
       to: row.oldEmail,
-      subject: "The email on your CreativesSelect account was changed",
-      text: `Hi ${user.displayName},\n\nThe email address of your CreativesSelect account was just changed to ${maskEmail(row.newEmail)}.\n\nIf that was you, there's nothing to do.\n\nIf it wasn't, open this link within 7 days to put this address back and sign every device out:\n\n${baseUrl()}/undo-email-change#token=${revertToken}\n\nThen use "Forgot password" to choose a new password.`,
+      ...emailFor("emailChanged", user, { name: user.displayName, masked: maskEmail(row.newEmail), link: `${baseUrl()}/undo-email-change#token=${revertToken}` }),
     });
     res.status(204).end();
   } catch (err) {
@@ -171,8 +169,7 @@ emailChangeRouter.post("/email/revert", async (req, res) => {
     await Promise.all([endAllSessions(user._id), Passkey.deleteMany({ user: user._id }), PasswordReset.deleteMany({ user: user._id }), EmailChange.deleteMany({ user: user._id }), EmailVerification.deleteMany({ user: user._id })]);
     send({
       to: row.oldEmail,
-      subject: "Your CreativesSelect email was put back",
-      text: `Hi ${user.displayName},\n\nThe email address of your CreativesSelect account is ${maskEmail(row.oldEmail)} again, and every device was signed out. Any passkeys were removed too, as a precaution: add them again from your profile settings. Use "Forgot password" on the login page to choose a new password.`,
+      ...emailFor("emailRestored", user, { name: user.displayName, masked: maskEmail(row.oldEmail) }),
     });
     res.status(204).end();
   } catch (err) {

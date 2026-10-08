@@ -5,6 +5,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { clientIp } from "../utils/clientIp.js";
 import { sendMail } from "../utils/mailer.js";
+import { emailFor } from "../utils/emailText.js";
 import { seal, open } from "../utils/secretBox.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { generateRecoveryCodes, generateSecret, hashRecoveryCode, matchStep, otpauthUrl } from "../utils/totp.js";
@@ -35,8 +36,8 @@ const codeSchema = z.object({ code: z.string().min(1).max(40) });
 const loginSchema = z.object({ challenge: z.string().min(1).max(2000), code: z.string().min(1).max(40) });
 const passwordAndCodeSchema = passwordSchema.merge(codeSchema);
 
-function notify(user, subject, line) {
-  sendMail({ to: user.email, subject, text: `Hi ${user.displayName},\n\n${line}\n\nIf that wasn't you, change your password right away and sign out other devices from your profile settings.` }).catch((err) => console.error("Two-step notice failed:", err.message));
+function notify(user, kind) {
+  sendMail({ to: user.email, ...emailFor(kind, user, { name: user.displayName }) }).catch((err) => console.error("Two-step notice failed:", err.message));
 }
 
 const newRecoveryCodes = () => {
@@ -143,7 +144,7 @@ twoFactorRouter.post("/2fa/enable", requireAuth, async (req, res) => {
       { $set: { "twoFactor.enabled": true, "twoFactor.secret": user.twoFactor.pendingSecret, "twoFactor.pendingSecret": null, "twoFactor.lastStep": step, "twoFactor.recoveryHashes": hashes, "twoFactor.enabledAt": new Date() } }
     );
     if (turnedOn.modifiedCount !== 1) return res.status(409).json({ error: "Two-step sign-in is already on" });
-    notify(user, "Two-step sign-in was turned on", "Two-step sign-in was just turned on for your CreativesSelect account. From now on, logging in needs a code from your authenticator app.");
+    notify(user, "twoFactorOn");
     res.json({ recoveryCodes: codes });
   } catch (err) {
     serverError(res, err);
@@ -159,7 +160,7 @@ twoFactorRouter.post("/2fa/disable", requireAuth, async (req, res) => {
     if (!user.twoFactor?.enabled) return res.status(400).json({ error: "Two-step sign-in isn't on" });
     if (!(await secondStepOk(req, res, user, parsed.data.code))) return;
     await User.updateOne({ _id: user._id }, { $set: { twoFactor: { enabled: false, secret: null, pendingSecret: null, lastStep: 0, recoveryHashes: [], enabledAt: null } } });
-    notify(user, "Two-step sign-in was turned off", "Two-step sign-in was just turned off for your CreativesSelect account.");
+    notify(user, "twoFactorOff");
     res.status(204).end();
   } catch (err) {
     serverError(res, err);

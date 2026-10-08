@@ -4,6 +4,7 @@ import { passwordCost } from "../utils/passwordCost.js";
 import { WALLPAPER_MOTIONS } from "../utils/wallpaperMotion.js";
 import { cleanHidden, completeOrder } from "../utils/profileSections.js";
 import { isAdminUser } from "../utils/admin.js";
+import { LANGUAGES } from "../utils/languages.js";
 
 const userSchema = new mongoose.Schema(
   {
@@ -57,6 +58,8 @@ const userSchema = new mongoose.Schema(
     // Whether friends can see when this person has read their messages and when they are typing. It is shared, not one-way: with it off they
     // neither show these to others nor see them (see routes/messages.routes.js).
     chatStatus: { type: Boolean, default: true },
+    // The language the person uses the site in (the page sends it), so what the site emails them is in it too. See utils/emailText.js.
+    language: { type: String, enum: LANGUAGES, default: "en" },
     // The CSverified badge, in two independent parts: given by an administrator, or earned by having 1,000 active friends (see
     // services/csVerified.js). Neither can be set from a request by the person themselves.
     csVerifiedByAdmin: { type: Boolean, default: false },
@@ -135,7 +138,7 @@ userSchema.methods.comparePassword = function (candidate) {
 userSchema.methods.toPublic = function ({ includeEmail = false } = {}) {
   return {
     id: this._id,
-    ...(includeEmail ? { email: this.email, emailVerified: this.emailVerified, showActivity: this.showActivity !== false, profileViews: this.profileViews === true, showConnections: this.showConnections !== false, chatStatus: this.chatStatus !== false, isAdmin: isAdminUser(this) } : {}),
+    ...(includeEmail ? { email: this.email, emailVerified: this.emailVerified, showActivity: this.showActivity !== false, profileViews: this.profileViews === true, showConnections: this.showConnections !== false, chatStatus: this.chatStatus !== false, language: this.language || "en", isAdmin: isAdminUser(this) } : {}),
     username: this.username,
     displayName: this.displayName,
     bio: this.bio,

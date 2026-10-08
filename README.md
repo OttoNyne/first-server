@@ -50,7 +50,7 @@ The first `test:local` or `e2e-api` downloads the MongoDB program once (about 59
 after that it starts in about a second. Tests lower the password hashing cost (`BCRYPT_COST`) to run faster; that
 setting is ignored in production.
 
-Runs the Vitest + Supertest suite (1082 tests: auth incl. throttling/CSRF/session
+Runs the Vitest + Supertest suite (1104 tests: auth incl. throttling/CSRF/session
 revocation, Tasks CRUD and the Help wanted board, friends, blocking, groups, media,
 profile editing, portfolio reactions and videos, account deletion, password change, uploads,
 stored-asset cleanup)

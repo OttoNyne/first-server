@@ -5,6 +5,7 @@ import { Session } from "../models/Session.js";
 import { User } from "../models/User.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { sendMail } from "../utils/mailer.js";
+import { emailFor } from "../utils/emailText.js";
 import { AUTH_COOKIE_NAME, setAuthCookie, signAuthToken } from "../middleware/auth.js";
 import { deviceLabel } from "../utils/deviceLabel.js";
 
@@ -36,7 +37,7 @@ export async function recognizeDevice(req, res, user, { notify = false } = {}) {
     res.cookie(DEVICE_COOKIE, id, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: DEVICE_COOKIE_MS, path: "/" });
     const hash = createHash("sha256").update(`${user._id}:${id}`).digest("hex");
 
-    const person = await User.findById(user._id).select("knownDevices signInAlerts email displayName");
+    const person = await User.findById(user._id).select("knownDevices signInAlerts email displayName language");
     if (!person) return;
     if (person.knownDevices.some((d) => d.hash === hash)) return;
     const added = await User.updateOne(
@@ -47,14 +48,7 @@ export async function recognizeDevice(req, res, user, { notify = false } = {}) {
     if (!(await alertsPerHour.allow(String(person._id)))) return;
     sendMail({
       to: person.email,
-      subject: "New sign-in to your CreativesSelect account",
-      text: [
-        `Hi ${person.displayName},`,
-        `Your CreativesSelect account was just signed in to from a browser or phone we haven't seen before: ${deviceLabel(req.get("user-agent"))}, at ${new Date().toUTCString()}.`,
-        "If that was you, there's nothing to do.",
-        "If it wasn't, change your password right away (that signs every other device out) and turn on two-step sign-in, both from your profile settings.",
-        'You can turn these emails off under "Where you\'re signed in" in your profile settings.',
-      ].join("\n\n"),
+      ...emailFor("newSignIn", person, { name: person.displayName, device: deviceLabel(req.get("user-agent")), when: new Date().toUTCString() }),
     }).catch((err) => console.error("New-device email failed:", err.message));
   } catch (err) {
     console.error("Recognising the device failed:", err.message);

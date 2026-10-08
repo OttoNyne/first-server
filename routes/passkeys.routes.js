@@ -9,6 +9,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { clientIp } from "../utils/clientIp.js";
 import { sendMail } from "../utils/mailer.js";
+import { emailFor } from "../utils/emailText.js";
 import { isAllowedOrigin, primaryClientUrl } from "../utils/origins.js";
 import { checkLine } from "../utils/profileFields.js";
 import { toPublicUser } from "../utils/serialize.js";
@@ -66,8 +67,8 @@ const serverError = (res, err) => {
 const WRONG_ORIGIN = () => ({ error: `Passkeys work on ${rpId()} only. Open the site there to use them.`, code: "passkey_wrong_site" });
 const FAILED = { error: "That passkey didn't work. Try again, or sign in with your password." };
 
-function notify(user, subject, line) {
-  sendMail({ to: user.email, subject, text: `Hi ${user.displayName},\n\n${line}\n\nIf that wasn't you, change your password right away and sign out other devices from your profile settings.` }).catch((err) => console.error("Passkey notice failed:", err.message));
+function notify(user, kind, keyName) {
+  sendMail({ to: user.email, ...emailFor(kind, user, { name: user.displayName, keyName }) }).catch((err) => console.error("Passkey notice failed:", err.message));
 }
 
 /** The random value inside what the browser sent back, which names the challenge we gave it. */
@@ -185,7 +186,7 @@ passkeysRouter.post("/passkeys/register/verify", requireAuth, async (req, res) =
       if (err?.code === 11000) return res.status(409).json({ error: "That passkey is already registered." });
       throw err;
     }
-    notify(user, "A passkey was added to your CreativesSelect account", `A passkey called "${key.name}" was just added to your CreativesSelect account. It can now be used to log in without your password.`);
+    notify(user, "passkeyAdded", key.name);
     res.status(201).json({ passkey: show(key) });
   } catch (err) {
     serverError(res, err);
@@ -285,7 +286,7 @@ passkeysRouter.delete("/passkeys/:id", requireAuth, async (req, res) => {
     }
     const key = await Passkey.findOneAndDelete({ _id: req.params.id, user: user._id });
     if (!key) return res.status(404).json({ error: "That passkey wasn't found" });
-    notify(user, "A passkey was removed from your CreativesSelect account", `The passkey called "${key.name}" was just removed from your CreativesSelect account.`);
+    notify(user, "passkeyRemoved", key.name);
     res.status(204).end();
   } catch (err) {
     serverError(res, err);

@@ -25,6 +25,7 @@ import { checkComment } from "../utils/commentInput.js";
 import { releasePictures } from "../services/commentPictures.js";
 import { escapeRegex } from "../utils/regex.js";
 import { applyThemeChange, checkTheme } from "../utils/profileStyle.js";
+import { isLanguage, LANGUAGES } from "../utils/languages.js";
 
 export const profilesRouter = Router();
 
@@ -75,7 +76,7 @@ profilesRouter.get("/tags", requireAuth, async (req, res) => {
 
 profilesRouter.patch("/me", requireAuth, async (req, res) => {
   const user = await User.findById(req.user.id);
-  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections, showActivity, chatStatus, profileViews, showConnections } = req.body;
+  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections, showActivity, chatStatus, profileViews, showConnections, language } = req.body;
   const fields = {};
   // the theme is checked before anything is changed, so a bad setting leaves the profile exactly as it was
   const themeChange = theme !== undefined ? checkTheme(theme) : null;
@@ -102,6 +103,10 @@ profilesRouter.patch("/me", requireAuth, async (req, res) => {
     fields.showActivity = showActivity;
     // turning it off also forgets when they were last active
     if (!showActivity) fields.lastActiveAt = null;
+  }
+  if (language !== undefined) {
+    if (!isLanguage(language)) return res.status(400).json({ error: `language must be one of: ${LANGUAGES.join(", ")}` });
+    fields.language = language;
   }
   if (chatStatus !== undefined) {
     if (typeof chatStatus !== "boolean") return res.status(400).json({ error: "chatStatus must be true or false" });

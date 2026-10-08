@@ -16,6 +16,8 @@ import { primaryClientUrl } from "../utils/origins.js";
 import { sendVerificationEmail } from "../services/emailVerification.js";
 import { redeemInvite } from "../services/invites.js";
 import { createHash, randomBytes } from "node:crypto";
+import { emailFor } from "../utils/emailText.js";
+import { LANGUAGES } from "../utils/languages.js";
 
 export const authRouter = Router();
 
@@ -40,6 +42,8 @@ const registerSchema = z.object({
   displayName: z.string().min(1).max(80),
   // The code from an invite link, if they came in through one.
   invite: z.string().max(64).optional(),
+  // The language the page is in, so what the site emails is in it too.
+  language: z.enum(LANGUAGES).optional(),
 });
 
 const loginSchema = z.object({
@@ -55,14 +59,14 @@ authRouter.post("/register", async (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.issues[0].message });
     }
-    const { email, username, password, displayName, invite } = parsed.data;
+    const { email, username, password, displayName, invite, language } = parsed.data;
 
     const existing = await User.findOne({ $or: [{ email }, { username: username.toLowerCase() }] });
     if (existing || (await UsernameHistory.exists({ username: username.toLowerCase() }))) {
       return res.status(409).json({ error: "Email or username already taken" });
     }
 
-    const user = new User({ email, username, displayName });
+    const user = new User({ email, username, displayName, ...(language ? { language } : {}) });
     user.password = password;
     await user.save();
 
@@ -185,16 +189,7 @@ async function emailResetLink(email) {
   const token = randomBytes(32).toString("hex");
   await PasswordReset.create({ user: user._id, tokenHash: hashToken(token), expireAt: new Date(Date.now() + RESET_TTL_MS) });
   const base = process.env.CLIENT_URL ? primaryClientUrl() : "http://localhost:5173";
-  await sendMail({
-    to: user.email,
-    subject: "Reset your CreativesSelect password",
-    text:
-      `Hi ${user.displayName},\n\n` +
-      "Someone asked to reset the password for your CreativesSelect account. " +
-      "To choose a new one, open this link within an hour:\n\n" +
-      `${base}/reset-password#token=${token}\n\n` +
-      "If that wasn't you, ignore this email — your password stays as it is.",
-  });
+  await sendMail({ to: user.email, ...emailFor("resetLink", user, { name: user.displayName, link: `${base}/reset-password#token=${token}` }) });
 }
 
 // Lets the page say so up front when this site can't send email yet, instead of promising a link
@@ -246,15 +241,7 @@ authRouter.post("/reset-password", async (req, res) => {
     // Anyone who had got in could have added a passkey, which would outlive this reset: so the way back removes them all.
     const removedPasskeys = (await Passkey.deleteMany({ user: user._id })).deletedCount;
     await PasswordReset.deleteMany({ user: user._id });
-    sendMail({
-      to: user.email,
-      subject: "Your CreativesSelect password was changed",
-      text:
-        `Hi ${user.displayName},\n\n` +
-        "The password for your CreativesSelect account was just reset. If that was you, there's nothing to do. " +
-        (removedPasskeys ? "Any passkeys on the account were removed too, as a precaution: add them again from your profile settings. " : "") +
-        "If it wasn't, reset it again right away.",
-    });
+    sendMail({ to: user.email, ...emailFor("passwordReset", user, { name: user.displayName, removedPasskeys }) });
     res.status(204).end();
   } catch (err) {
     console.error(err);
