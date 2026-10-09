@@ -18,11 +18,17 @@ const { startEventReminderTimer } = await import("./services/events.js");
 const { startBirthdayTimer } = await import("./services/birthdays.js");
 const { startCsVerifiedTimer } = await import("./services/csVerified.js");
 const { migrateMediaReactions } = await import("./services/reactionMigration.js");
+const { backfillHashtags } = await import("./services/hashtags.js");
 
 // Old likes on portfolio pieces become 👍 reactions (and the old collection is emptied); nothing to do once that has happened.
 migrateMediaReactions()
   .then((n) => n && console.log(`Carried ${n} old likes over to reactions`))
   .catch((err) => console.error("Couldn't carry old likes over:", err.message));
+
+// Posts and pieces made before hashtags existed get their tags (nothing to do once that has happened).
+backfillHashtags()
+  .then((n) => n && console.log(`Worked out the hashtags of ${n} older posts and pieces`))
+  .catch((err) => console.error("Couldn't work out older hashtags:", err.message));
 
 const PORT = process.env.PORT || 5000;
 

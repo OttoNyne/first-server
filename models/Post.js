@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { hashtagsIn } from "../utils/hashtags.js";
 
 const postSchema = new mongoose.Schema(
   {
@@ -13,8 +14,15 @@ const postSchema = new mongoose.Schema(
     imagePosition: { type: String },
     isAiText: { type: Boolean, default: false },
     isAiImage: { type: Boolean, default: false },
+    // The #hashtags in the words, lower-cased (always worked out from the content; see utils/hashtags.js).
+    tags: { type: [String] },
   },
   { timestamps: true }
 );
+
+postSchema.pre("save", function () {
+  if (this.isNew || this.isModified("content") || !this.tags) this.tags = hashtagsIn(this.content);
+});
+postSchema.index({ tags: 1, _id: -1 });
 
 export const Post = mongoose.model("Post", postSchema);
