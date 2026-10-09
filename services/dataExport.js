@@ -28,6 +28,7 @@ import { Invite } from "../models/Invite.js";
 import { UsernameHistory } from "../models/UsernameHistory.js";
 import { languageOf } from "../utils/languages.js";
 import { Credit } from "../models/Credit.js";
+import { Follow } from "../models/Follow.js";
 import { ChallengeEntry } from "../models/ChallengeEntry.js";
 import { WorkRequest } from "../models/WorkRequest.js";
 
@@ -87,6 +88,8 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
   const creditsGiven = await rows("creditsGiven", Credit.find({ owner: id }));
   const creditsAccepted = await rows("creditsAccepted", Credit.find({ person: id, status: "accepted" }));
   const challengeEntries = await rows("challengeEntries", ChallengeEntry.find({ user: id }));
+  const followRows = await rows("following", Follow.find({ follower: id }));
+  const followNames = (await User.find({ _id: { $in: followRows.map((f) => f.following) } }).select("username").lean()).map((u) => u.username);
   // the requests for work you sent, and the answers you gave to the ones sent to you
   const requestsSent = await rows("workRequestsSent", WorkRequest.find({ from: id }));
   const requestsAnswered = await rows("workRequestsAnswered", WorkRequest.find({ to: id, status: { $ne: "open" } }));
@@ -171,6 +174,7 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
       challengeEntries: challengeEntries.map((e) => ({ week: e.week, piece: String(e.item), entered: iso(e.createdAt) })),
       commentsYouWrote: mediaComments.map((c) => ({ id: String(c._id), onPiece: String(c.item), text: text(c.content), pictureUrl: c.imageUrl ?? null, posted: iso(c.createdAt) })),
     },
+    following: followNames,
     workRequests: {
       youSent: requestsSent.map((r) => ({ to: requestNames.get(String(r.to)) ?? null, title: text(r.title), details: text(r.details), budget: text(r.budget), deadline: r.deadline ? iso(r.deadline) : null, status: r.status, theirReply: text(r.reply), sent: iso(r.createdAt) })),
       youAnswered: requestsAnswered.map((r) => ({ from: requestNames.get(String(r.from)) ?? null, title: text(r.title), accepted: r.status === "accepted", yourReply: text(r.reply), answered: iso(r.answeredAt) })),

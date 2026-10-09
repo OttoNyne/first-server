@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Follow } from "../models/Follow.js";
 import { User } from "../models/User.js";
 import { Block } from "../models/Block.js";
 import { Friendship } from "../models/Friendship.js";
@@ -26,6 +27,9 @@ moderationRouter.post("/users/:username/block", async (req, res) => {
       { requester: target._id, addressee: req.user.id },
     ],
   });
+
+  // and neither follows the other any more
+  await Follow.deleteMany({ $or: [{ follower: req.user.id, following: target._id }, { follower: target._id, following: req.user.id }] });
 
   await Block.findOneAndUpdate(
     { blocker: req.user.id, blocked: target._id },

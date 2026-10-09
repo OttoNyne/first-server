@@ -2,6 +2,7 @@ import { Router } from "express";
 import { Post } from "../models/Post.js";
 import { Comment } from "../models/Comment.js";
 import { Friendship } from "../models/Friendship.js";
+import { followedAuthorIds } from "./follows.routes.js";
 import { requireAuth } from "../middleware/auth.js";
 import { releasePictures } from "../services/commentPictures.js";
 import { toPublicPost } from "../utils/serialize.js";
@@ -39,7 +40,8 @@ postsRouter.get("/feed", async (req, res) => {
   );
 
   // Newest first, twenty at a time; ?before=<post id> asks for the ones older than that.
-  const filter = { author: { $in: [req.user.id, ...friendIds] } };
+  // yourself, your friends, and the public profiles you follow
+  const filter = { author: { $in: [req.user.id, ...friendIds, ...(await followedAuthorIds(req.user.id))] } };
   const before = cursorFilter(req.query, mongoose);
   if (before) filter._id = { $lt: before };
   const found = await Post.find(filter).sort({ _id: -1 }).limit(PAGE + 1).populate("author");

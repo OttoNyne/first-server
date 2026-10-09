@@ -16,6 +16,7 @@ import { WALLPAPER_MOTIONS, isWallpaperMotion } from "../utils/wallpaperMotion.j
 import { MAX_LISTENING, MAX_MOOD, MAX_WORK_NOTE, checkLine, checkOffers, checkTags, isValidTag, normalizeTag } from "../utils/profileFields.js";
 import { checkHidden, checkOrder } from "../utils/profileSections.js";
 import { areFriends, blockedUserIds, getProfileForViewer } from "../utils/visibility.js";
+import { Follow } from "../models/Follow.js";
 import { canSeeProfileOf, notifyMentions } from "../services/mentions.js";
 import { activityFor } from "../utils/activity.js";
 import { ProfileView } from "../models/ProfileView.js";
@@ -337,7 +338,10 @@ profilesRouter.get("/:username", attachUserIfPresent, async (req, res) => {
   try {
     const user = await getProfileForViewer(req.params.username, req.user?.id);
     const isFriend = req.user ? await areFriends(req.user.id, user._id) : false;
-    res.json({ user: { ...(await toPublicUser(user, req.user?.id)), ...activityFor(user, req.user?.id, isFriend) } });
+    // how many follow them and whom they follow are shown wherever the whole profile is (not on a private profile's restricted view)
+    const whole = !user.isPrivate || isFriend || String(user._id) === String(req.user?.id);
+    const following = whole ? { followerCount: await Follow.countDocuments({ following: user._id }), followingCount: await Follow.countDocuments({ follower: user._id }), ...(req.user && String(user._id) !== req.user.id ? { iFollow: Boolean(await Follow.exists({ follower: req.user.id, following: user._id })) } : {}) } : {};
+    res.json({ user: { ...(await toPublicUser(user, req.user?.id)), ...activityFor(user, req.user?.id, isFriend), ...following } });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }

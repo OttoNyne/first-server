@@ -116,6 +116,8 @@ export function describePush(n, actor, recipient) {
       return { body: say("work_request"), url: `${mine}#work` };
     case "work_reply":
       return { body: say("work_reply"), url: `${mine}#work` };
+    case "follow":
+      return { body: say("follow"), url: theirs };
     case "mention":
       return { body: say("mention"), url: isSitePath(p.url) ? p.url : "/" };
     case "cs_verified":
