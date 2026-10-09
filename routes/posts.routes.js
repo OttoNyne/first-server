@@ -8,6 +8,8 @@ import { POST_POPULATE } from "./saves.routes.js";
 import { Save } from "../models/Save.js";
 import { Notification } from "../models/Notification.js";
 import { savedIdsOf } from "../utils/saves.js";
+import { PollVote } from "../models/PollVote.js";
+import { hasPoll, isClosed, pollTallies, publicPoll, readPoll } from "../utils/polls.js";
 import { areBlocked } from "../utils/visibility.js";
 import { cleanLine } from "../utils/profileFields.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -35,7 +37,8 @@ export async function withCommentCounts(posts, viewerId) {
   const countMap = new Map(counts.map((c) => [String(c._id), c.count]));
   const reactions = await summarise("post", posts.map((p) => p._id), viewerId);
   const saved = await savedIdsOf("post", posts.map((p) => p._id), viewerId);
-  return Promise.all(posts.map((p) => toPublicPost(p, countMap.get(String(p._id)) || 0, viewerId, reactions.get(String(p._id)), { saved: saved.has(String(p._id)) })));
+  const polls = await pollTallies(posts, viewerId);
+  return Promise.all(posts.map((p) => toPublicPost(p, countMap.get(String(p._id)) || 0, viewerId, reactions.get(String(p._id)), { saved: saved.has(String(p._id)), poll: polls.get(String(p._id)) })));
 }
 
 postsRouter.get("/feed", async (req, res) => {
@@ -129,6 +132,8 @@ postsRouter.post("/", async (req, res) => {
   if (alt.error) return res.status(400).json({ error: alt.error });
   const text = checkText(req.body?.content, MAX_POST, "Posts");
   if (text.error) return res.status(400).json({ error: text.error });
+  const asked = readPoll(req.body?.poll);
+  if (asked.error) return res.status(400).json({ error: asked.error });
   if (!(await postLimiter.allow(req.user.id))) {
     res.set("Retry-After", String(postLimiter.windowSeconds));
     return res.status(429).json({ error: "You're posting too fast — try again in a few minutes." });
@@ -139,12 +144,41 @@ postsRouter.post("/", async (req, res) => {
     imageUrl: req.body.imageUrl,
     ...(req.body.imageUrl ? framing : {}),
     imageAlt: alt.value,
+    ...(asked.poll ? { poll: asked.poll } : {}),
     isAiText: req.body.isAiText || false,
     isAiImage: req.body.isAiImage || false,
   });
   await post.populate("author");
   await notifyMentions({ text: post.content, actorId: req.user.id, url: `/posts/${post._id}`, canSee: canSeeProfileOf(post.author) });
   res.status(201).json({ post: await toPublicPost(post, 0, req.user.id) });
+});
+
+// Vote in a post's poll: `{ option: 0 }` is the first option. One vote each, and it is final; nobody can vote once the poll has closed. Only people who can see
+// the post can vote (a private profile or a block answers 404, as for a missing poll). Answers with how the poll stands.
+const voteLimiter = createLimiter({ name: "poll-vote", limit: 120, windowMs: 60 * 60 * 1000 });
+postsRouter.put("/:id/poll/vote", async (req, res) => {
+  const post = mongoose.isValidObjectId(req.params.id) ? await Post.findById(req.params.id).populate("author") : null;
+  let visible = Boolean(post && hasPoll(post) && post.author);
+  if (visible) {
+    try {
+      await assertVisible(post.author, req.user.id);
+    } catch {
+      visible = false;
+    }
+  }
+  if (!visible) return res.status(404).json({ error: "Poll not found" });
+  const option = req.body?.option;
+  if (!Number.isInteger(option) || option < 0 || option >= post.poll.options.length) return res.status(400).json({ error: "Choose one of the options" });
+  if (isClosed(post)) return res.status(400).json({ error: "This poll has ended" });
+  if (!(await voteLimiter.allow(req.user.id))) return res.status(429).json({ error: "You're voting too fast — try again in a bit" });
+  try {
+    await PollVote.create({ post: post._id, user: req.user.id, option });
+  } catch (err) {
+    if (err?.code === 11000) return res.status(409).json({ error: "You have already voted in this poll" });
+    throw err;
+  }
+  const tally = (await pollTallies([post], req.user.id)).get(String(post._id));
+  res.status(201).json({ poll: publicPoll(post, tally) });
 });
 
 // Change the words of your own post and/or the description of its picture (the picture and its framing stay as they are). Changed words mark it as edited.
@@ -253,6 +287,7 @@ postsRouter.delete("/:id", async (req, res) => {
   await post.deleteOne();
   await forgetReactions("post", [post._id]);
   await Save.deleteMany({ targetType: "post", target: post._id });
+  await PollVote.deleteMany({ post: post._id });
   await User.updateOne({ _id: post.author, pinnedPost: post._id }, { $set: { pinnedPost: null } });
   await Notification.deleteMany({ type: "repost", "payload.postId": String(post._id) });
   // An AI-generated image that only this post used would otherwise sit on

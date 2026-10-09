@@ -18,6 +18,8 @@ const postSchema = new mongoose.Schema(
     imagePosition: { type: String },
     // What the picture shows, in the author's words, for people who can't see it (the picture's alternative text).
     imageAlt: { type: String, default: "", maxlength: 300 },
+    // A poll the post asks (the words are the question): two to four options and when it closes. The votes are in PollVote.
+    poll: { type: new mongoose.Schema({ options: { type: [String] }, endsAt: { type: Date } }, { _id: false }), default: undefined },
     isAiText: { type: Boolean, default: false },
     isAiImage: { type: Boolean, default: false },
     // The #hashtags in the words, lower-cased (always worked out from the content; see utils/hashtags.js).

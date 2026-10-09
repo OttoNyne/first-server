@@ -11,6 +11,7 @@ import { normalizeTag } from "../utils/hashtags.js";
 import { summarise } from "../utils/reactions.js";
 import { toPublicMediaItem, toPublicPost } from "../utils/serialize.js";
 import { savedIdsOf } from "../utils/saves.js";
+import { pollTallies } from "../utils/polls.js";
 import { POST_POPULATE } from "./saves.routes.js";
 
 // Explore: the public posts and portfolio pieces of people with public profiles, newest first, optionally about one #hashtag, and the
@@ -79,7 +80,8 @@ exploreRouter.get("/", async (req, res) => {
     const saved = await savedIdsOf("post", ids, req.user?.id);
     const [counts, reactions] = await Promise.all([Comment.aggregate([{ $match: { post: { $in: ids } } }, { $group: { _id: "$post", count: { $sum: 1 } } }]), summarise("post", ids, req.user?.id)]);
     const countOf = new Map(counts.map((c) => [String(c._id), c.count]));
-    const posts = await Promise.all(docs.map((p) => toPublicPost(p, countOf.get(String(p._id)) || 0, req.user?.id, reactions.get(String(p._id)), { saved: saved.has(String(p._id)) })));
+    const polls = await pollTallies(docs, req.user?.id);
+    const posts = await Promise.all(docs.map((p) => toPublicPost(p, countOf.get(String(p._id)) || 0, req.user?.id, reactions.get(String(p._id)), { saved: saved.has(String(p._id)), poll: polls.get(String(p._id)) })));
     return res.json({ type, tag, posts, hasMore, next });
   }
 

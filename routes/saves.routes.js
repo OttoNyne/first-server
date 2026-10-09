@@ -9,6 +9,7 @@ import { assertVisible, blockedUserIds } from "../utils/visibility.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { summarise } from "../utils/reactions.js";
 import { toPublicMediaItem, toPublicPost } from "../utils/serialize.js";
+import { pollTallies } from "../utils/polls.js";
 
 // Saving: a private list of posts and portfolio pieces to come back to. Only the person who saved sees it, and an item shows in it only while
 // the person who made it could still be seen by them (a profile that went private, or a block, takes it out of the list, not out of storage).
@@ -91,7 +92,8 @@ savesRouter.get("/", async (req, res) => {
   if (kind === "posts") {
     const [counts, reactions] = await Promise.all([Comment.aggregate([{ $match: { post: { $in: ids } } }, { $group: { _id: "$post", count: { $sum: 1 } } }]), summarise("post", ids, req.user.id)]);
     const countOf = new Map(counts.map((c) => [String(c._id), c.count]));
-    const posts = await Promise.all(shown.map((p) => toPublicPost(p, countOf.get(String(p._id)) || 0, req.user.id, reactions.get(String(p._id)), { saved: true })));
+    const polls = await pollTallies(shown, req.user.id);
+    const posts = await Promise.all(shown.map((p) => toPublicPost(p, countOf.get(String(p._id)) || 0, req.user.id, reactions.get(String(p._id)), { saved: true, poll: polls.get(String(p._id)) })));
     return res.json({ type: kind, posts, hasMore: rows.length > PAGE, next });
   }
   const reactions = await summarise("media", ids, req.user.id);

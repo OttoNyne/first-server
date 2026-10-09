@@ -1,5 +1,6 @@
 import { areBlocked, areFriends } from "./visibility.js";
 import { emptySummary } from "./reactions.js";
+import { hasPoll, publicPoll } from "./polls.js";
 
 // Every place a User gets embedded in a response (search, friends lists,
 // group rosters, comment/post authors, notification actors, top friends...)
@@ -85,7 +86,7 @@ async function repostView(original, viewerId) {
   };
 }
 
-// extras: { saved } (whether the viewer has saved it)
+// extras: { saved } (whether the viewer has saved it), { poll } (how its poll stands, from pollTallies)
 export async function toPublicPost(post, commentCount = 0, viewerId, reactions = emptySummary(), extras = {}) {
   return {
     id: post._id,
@@ -106,6 +107,7 @@ export async function toPublicPost(post, commentCount = 0, viewerId, reactions =
     isRepost: Boolean(post.isRepost),
     repost: post.isRepost ? await repostView(post.repostOf, viewerId) : null,
     saved: extras.saved === true,
+    poll: hasPoll(post) ? publicPoll(post, extras.poll) : null,
     // whether its author has pinned it to the top of their profile (known when the author is loaded with the post)
     pinned: Boolean(post.author?.pinnedPost && String(post.author.pinnedPost) === String(post._id)),
   };
