@@ -38,6 +38,9 @@ const userSchema = new mongoose.Schema(
     birthday: { month: { type: Number, min: 1, max: 12 }, day: { type: Number, min: 1, max: 31 } },
     // The last year friends were told about the birthday (so it is told once a year however often it is changed).
     lastBirthdayYear: { type: Number, default: null },
+    // What the profile puts first: one of their own posts (pinned) and one of their own portfolio pieces (featured). Null when nothing is.
+    pinnedPost: { type: mongoose.Schema.Types.ObjectId, ref: "Post", default: null },
+    featuredPiece: { type: mongoose.Schema.Types.ObjectId, ref: "MediaItem", default: null },
     // The order of the sections below the introduction, and which of them are hidden (see utils/profileSections.js).
     sectionOrder: { type: [String], default: [] },
     hiddenSections: { type: [String], default: [] },

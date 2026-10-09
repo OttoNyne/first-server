@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { Post } from "../models/Post.js";
+import { User } from "../models/User.js";
 import { Comment } from "../models/Comment.js";
 import { Friendship } from "../models/Friendship.js";
 import { followedAuthorIds } from "./follows.routes.js";
@@ -26,7 +27,7 @@ const postLimiter = createLimiter({ name: "post-create", limit: 20, windowMs: 10
 export const postsRouter = Router();
 postsRouter.use(requireAuth);
 
-async function withCommentCounts(posts, viewerId) {
+export async function withCommentCounts(posts, viewerId) {
   const counts = await Comment.aggregate([
     { $match: { post: { $in: posts.map((p) => p._id) } } },
     { $group: { _id: "$post", count: { $sum: 1 } } },
@@ -229,6 +230,19 @@ postsRouter.post("/:id/repost", async (req, res) => {
   res.status(201).json({ post: out });
 });
 
+// Put one of your own posts at the top of your profile (one at a time: pinning another replaces it), or take it down again.
+postsRouter.put("/:id/pin", async (req, res) => {
+  const post = mongoose.isValidObjectId(req.params.id) ? await Post.findById(req.params.id) : null;
+  if (!post || String(post.author) !== req.user.id) return res.status(404).json({ error: "Post not found" });
+  await User.updateOne({ _id: req.user.id }, { $set: { pinnedPost: post._id } });
+  res.json({ pinned: true });
+});
+
+postsRouter.delete("/:id/pin", async (req, res) => {
+  if (mongoose.isValidObjectId(req.params.id)) await User.updateOne({ _id: req.user.id, pinnedPost: req.params.id }, { $set: { pinnedPost: null } });
+  res.status(204).end();
+});
+
 postsRouter.delete("/:id", async (req, res) => {
   const post = await Post.findById(req.params.id);
   if (!post) return res.status(404).json({ error: "Post not found" });
@@ -239,6 +253,7 @@ postsRouter.delete("/:id", async (req, res) => {
   await post.deleteOne();
   await forgetReactions("post", [post._id]);
   await Save.deleteMany({ targetType: "post", target: post._id });
+  await User.updateOne({ _id: post.author, pinnedPost: post._id }, { $set: { pinnedPost: null } });
   await Notification.deleteMany({ type: "repost", "payload.postId": String(post._id) });
   // An AI-generated image that only this post used would otherwise sit on
   // Cloudinary forever.

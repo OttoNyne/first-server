@@ -106,5 +106,7 @@ export async function toPublicPost(post, commentCount = 0, viewerId, reactions =
     isRepost: Boolean(post.isRepost),
     repost: post.isRepost ? await repostView(post.repostOf, viewerId) : null,
     saved: extras.saved === true,
+    // whether its author has pinned it to the top of their profile (known when the author is loaded with the post)
+    pinned: Boolean(post.author?.pinnedPost && String(post.author.pinnedPost) === String(post._id)),
   };
 }

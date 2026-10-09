@@ -152,14 +152,17 @@ const reactionLimit = createLimiter({ name: "reaction", limit: 300, windowMs: 60
 mediaRouter.get("/user/:username", attachUserIfPresent, async (req, res) => {
   try {
     const user = await getProfileForViewer(req.params.username, req.user?.id);
-    const items = await MediaItem.find({ owner: user._id }).sort("-createdAt");
+    const found = await MediaItem.find({ owner: user._id }).sort("-createdAt");
+    // the featured piece comes first
+    const featuredId = user.featuredPiece ? String(user.featuredPiece) : null;
+    const items = [...found.filter((i) => String(i._id) === featuredId), ...found.filter((i) => String(i._id) !== featuredId)];
     const ids = items.map((i) => i._id);
     const summary = await summarise("media", ids, req.user?.id);
     const counts = new Map((await MediaComment.aggregate([{ $match: { item: { $in: ids } } }, { $group: { _id: "$item", n: { $sum: 1 } } }])).map((c) => [String(c._id), c.n]));
     const credits = await creditsForItems(ids, req.user?.id);
     const saved = await savedIdsOf("piece", ids, req.user?.id);
     res.json({
-      media: items.map((item) => ({ ...toPublicMediaItem(item, { reactions: summary.get(String(item._id)), commentCount: counts.get(String(item._id)) ?? 0 }), credits: credits.get(String(item._id)) ?? [], saved: saved.has(String(item._id)) })),
+      media: items.map((item) => ({ ...toPublicMediaItem(item, { reactions: summary.get(String(item._id)), commentCount: counts.get(String(item._id)) ?? 0 }), credits: credits.get(String(item._id)) ?? [], saved: saved.has(String(item._id)), featured: String(item._id) === featuredId })),
     });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -216,6 +219,19 @@ mediaRouter.patch("/:id", requireAuth, async (req, res) => {
   res.json({ item: toPublicMediaItem(item) });
 });
 
+// Put one of your own pieces first in your portfolio (one at a time: featuring another replaces it), or take it off again.
+mediaRouter.put("/:id/feature", requireAuth, async (req, res) => {
+  const item = mongoose.isValidObjectId(req.params.id) ? await MediaItem.findById(req.params.id) : null;
+  if (!item || String(item.owner) !== req.user.id) return res.status(404).json({ error: "Media item not found" });
+  await User.updateOne({ _id: req.user.id }, { $set: { featuredPiece: item._id } });
+  res.json({ featured: true });
+});
+
+mediaRouter.delete("/:id/feature", requireAuth, async (req, res) => {
+  if (mongoose.isValidObjectId(req.params.id)) await User.updateOne({ _id: req.user.id, featuredPiece: req.params.id }, { $set: { featuredPiece: null } });
+  res.status(204).end();
+});
+
 mediaRouter.delete("/:id", requireAuth, async (req, res) => {
   const item = await MediaItem.findById(req.params.id);
   if (!item) return res.status(404).json({ error: "Media item not found" });
@@ -225,6 +241,7 @@ mediaRouter.delete("/:id", requireAuth, async (req, res) => {
   await Credit.deleteMany({ item: item._id });
   await ChallengeEntry.deleteMany({ item: item._id });
   await Save.deleteMany({ targetType: "piece", target: item._id });
+  await User.updateOne({ _id: item.owner, featuredPiece: item._id }, { $set: { featuredPiece: null } });
   await Notification.deleteMany({ type: { $in: ["credit_request", "credit_accepted"] }, "payload.itemId": String(item._id) });
   const withPictures = await MediaComment.find({ item: item._id, imageUrl: { $ne: null } });
   await MediaComment.deleteMany({ item: item._id });
