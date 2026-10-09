@@ -4,7 +4,11 @@ import { hashtagsIn } from "../utils/hashtags.js";
 const postSchema = new mongoose.Schema(
   {
     author: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    content: { type: String, required: true, maxlength: 5000 },
+    // What the author wrote. A repost may have none (it only shares another post).
+    content: { type: String, required: function () { return !this.isRepost; }, maxlength: 5000, default: "" },
+    // A repost: this post shares another one (always the original, never a repost of a repost).
+    isRepost: { type: Boolean, default: false },
+    repostOf: { type: mongoose.Schema.Types.ObjectId, ref: "Post", default: null },
     // When the author last changed what they wrote (null if never).
     editedAt: { type: Date, default: null },
     imageUrl: { type: String, default: null },
@@ -24,5 +28,6 @@ postSchema.pre("save", function () {
   if (this.isNew || this.isModified("content") || !this.tags) this.tags = hashtagsIn(this.content);
 });
 postSchema.index({ tags: 1, _id: -1 });
+postSchema.index({ repostOf: 1, author: 1 });
 
 export const Post = mongoose.model("Post", postSchema);

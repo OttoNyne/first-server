@@ -29,6 +29,7 @@ import { UsernameHistory } from "../models/UsernameHistory.js";
 import { languageOf } from "../utils/languages.js";
 import { Credit } from "../models/Credit.js";
 import { Follow } from "../models/Follow.js";
+import { Save } from "../models/Save.js";
 import { ChallengeEntry } from "../models/ChallengeEntry.js";
 import { WorkRequest } from "../models/WorkRequest.js";
 
@@ -90,6 +91,7 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
   const challengeEntries = await rows("challengeEntries", ChallengeEntry.find({ user: id }));
   const followRows = await rows("following", Follow.find({ follower: id }));
   const followNames = (await User.find({ _id: { $in: followRows.map((f) => f.following) } }).select("username").lean()).map((u) => u.username);
+  const savedRows = await rows("saved", Save.find({ user: id }));
   // the requests for work you sent, and the answers you gave to the ones sent to you
   const requestsSent = await rows("workRequestsSent", WorkRequest.find({ from: id }));
   const requestsAnswered = await rows("workRequestsAnswered", WorkRequest.find({ to: id, status: { $ne: "open" } }));
@@ -160,7 +162,7 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
       twoStepSignInOn: Boolean(user.twoFactor?.enabled),
       previousUsernames: oldNames.map((o) => o.username),
     },
-    posts: posts.map((p) => ({ id: String(p._id), text: text(p.content), pictureUrl: p.imageUrl ?? null, madeWithAi: Boolean(p.isAiText || p.isAiImage), posted: iso(p.createdAt), edited: iso(p.editedAt) })),
+    posts: posts.map((p) => ({ id: String(p._id), text: text(p.content), pictureUrl: p.imageUrl ?? null, madeWithAi: Boolean(p.isAiText || p.isAiImage), posted: iso(p.createdAt), edited: iso(p.editedAt), sharedPost: p.isRepost ? String(p.repostOf) : null })),
     comments: comments.map((c) => ({ id: String(c._id), onPost: String(c.post), text: text(c.content), pictureUrl: c.imageUrl ?? null, posted: iso(c.createdAt), edited: iso(c.editedAt) })),
     testimonialsYouWrote: testimonials.map((c) => ({ id: String(c._id), onProfileOf: who(c.profileOwner), text: text(c.content), pictureUrl: c.imageUrl ?? null, posted: iso(c.createdAt), edited: iso(c.editedAt) })),
     blogEntries: blogEntries.map((b) => ({ id: String(b._id), title: text(b.title), text: text(b.body), posted: iso(b.createdAt), edited: iso(b.updatedAt) })),
@@ -175,6 +177,7 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
       commentsYouWrote: mediaComments.map((c) => ({ id: String(c._id), onPiece: String(c.item), text: text(c.content), pictureUrl: c.imageUrl ?? null, posted: iso(c.createdAt) })),
     },
     following: followNames,
+    saved: { posts: savedRows.filter((s) => s.targetType === "post").map((s) => String(s.target)), pieces: savedRows.filter((s) => s.targetType === "piece").map((s) => String(s.target)) },
     workRequests: {
       youSent: requestsSent.map((r) => ({ to: requestNames.get(String(r.to)) ?? null, title: text(r.title), details: text(r.details), budget: text(r.budget), deadline: r.deadline ? iso(r.deadline) : null, status: r.status, theirReply: text(r.reply), sent: iso(r.createdAt) })),
       youAnswered: requestsAnswered.map((r) => ({ from: requestNames.get(String(r.from)) ?? null, title: text(r.title), accepted: r.status === "accepted", yourReply: text(r.reply), answered: iso(r.answeredAt) })),

@@ -17,6 +17,8 @@ import { MAX_VIDEO_SECONDS, parseStartSeconds, parseVideoLink } from "../utils/v
 import { checkCaption } from "../utils/mediaCaption.js";
 import { checkEmoji, forgetReactions, notifyOfReaction, setReaction, summarise } from "../utils/reactions.js";
 import { Credit } from "../models/Credit.js";
+import { Save } from "../models/Save.js";
+import { savedIdsOf } from "../utils/saves.js";
 import { ChallengeEntry } from "../models/ChallengeEntry.js";
 import { Notification } from "../models/Notification.js";
 import { creditsForItems } from "./credits.routes.js";
@@ -155,8 +157,9 @@ mediaRouter.get("/user/:username", attachUserIfPresent, async (req, res) => {
     const summary = await summarise("media", ids, req.user?.id);
     const counts = new Map((await MediaComment.aggregate([{ $match: { item: { $in: ids } } }, { $group: { _id: "$item", n: { $sum: 1 } } }])).map((c) => [String(c._id), c.n]));
     const credits = await creditsForItems(ids, req.user?.id);
+    const saved = await savedIdsOf("piece", ids, req.user?.id);
     res.json({
-      media: items.map((item) => ({ ...toPublicMediaItem(item, { reactions: summary.get(String(item._id)), commentCount: counts.get(String(item._id)) ?? 0 }), credits: credits.get(String(item._id)) ?? [] })),
+      media: items.map((item) => ({ ...toPublicMediaItem(item, { reactions: summary.get(String(item._id)), commentCount: counts.get(String(item._id)) ?? 0 }), credits: credits.get(String(item._id)) ?? [], saved: saved.has(String(item._id)) })),
     });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -221,6 +224,7 @@ mediaRouter.delete("/:id", requireAuth, async (req, res) => {
   await forgetReactions("media", [item._id]);
   await Credit.deleteMany({ item: item._id });
   await ChallengeEntry.deleteMany({ item: item._id });
+  await Save.deleteMany({ targetType: "piece", target: item._id });
   await Notification.deleteMany({ type: { $in: ["credit_request", "credit_accepted"] }, "payload.itemId": String(item._id) });
   const withPictures = await MediaComment.find({ item: item._id, imageUrl: { $ne: null } });
   await MediaComment.deleteMany({ item: item._id });

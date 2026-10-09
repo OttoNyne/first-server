@@ -3,6 +3,11 @@ import { Post } from "../models/Post.js";
 import { Comment } from "../models/Comment.js";
 import { Friendship } from "../models/Friendship.js";
 import { followedAuthorIds } from "./follows.routes.js";
+import { POST_POPULATE } from "./saves.routes.js";
+import { Save } from "../models/Save.js";
+import { Notification } from "../models/Notification.js";
+import { savedIdsOf } from "../utils/saves.js";
+import { areBlocked } from "../utils/visibility.js";
 import { requireAuth } from "../middleware/auth.js";
 import { releasePictures } from "../services/commentPictures.js";
 import { toPublicPost } from "../utils/serialize.js";
@@ -27,7 +32,8 @@ async function withCommentCounts(posts, viewerId) {
   ]);
   const countMap = new Map(counts.map((c) => [String(c._id), c.count]));
   const reactions = await summarise("post", posts.map((p) => p._id), viewerId);
-  return Promise.all(posts.map((p) => toPublicPost(p, countMap.get(String(p._id)) || 0, viewerId, reactions.get(String(p._id)))));
+  const saved = await savedIdsOf("post", posts.map((p) => p._id), viewerId);
+  return Promise.all(posts.map((p) => toPublicPost(p, countMap.get(String(p._id)) || 0, viewerId, reactions.get(String(p._id)), { saved: saved.has(String(p._id)) })));
 }
 
 postsRouter.get("/feed", async (req, res) => {
@@ -44,7 +50,7 @@ postsRouter.get("/feed", async (req, res) => {
   const filter = { author: { $in: [req.user.id, ...friendIds, ...(await followedAuthorIds(req.user.id))] } };
   const before = cursorFilter(req.query, mongoose);
   if (before) filter._id = { $lt: before };
-  const found = await Post.find(filter).sort({ _id: -1 }).limit(PAGE + 1).populate("author");
+  const found = await Post.find(filter).sort({ _id: -1 }).limit(PAGE + 1).populate(POST_POPULATE);
   const posts = found.slice(0, PAGE);
 
   res.json({ posts: await withCommentCounts(posts, req.user.id), hasMore: found.length > PAGE });
@@ -56,7 +62,7 @@ postsRouter.get("/user/:username", async (req, res) => {
     const filter = { author: user._id };
     const before = cursorFilter(req.query, mongoose);
     if (before) filter._id = { $lt: before };
-    const found = await Post.find(filter).sort({ _id: -1 }).limit(PAGE + 1).populate("author");
+    const found = await Post.find(filter).sort({ _id: -1 }).limit(PAGE + 1).populate(POST_POPULATE);
     const posts = found.slice(0, PAGE);
     res.json({ posts: await withCommentCounts(posts, req.user.id), hasMore: found.length > PAGE });
   } catch (err) {
@@ -68,7 +74,7 @@ postsRouter.get("/user/:username", async (req, res) => {
 // to you (private and not a friend, or blocked either way) it answers 404 exactly as if the post did not exist.
 postsRouter.get("/:id", async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: "Post not found" });
-  const post = await Post.findById(req.params.id).populate("author");
+  const post = await Post.findById(req.params.id).populate(POST_POPULATE);
   if (!post || !post.author) return res.status(404).json({ error: "Post not found" });
   try {
     await assertVisible(post.author, req.user.id);
@@ -132,7 +138,8 @@ postsRouter.patch("/:id", async (req, res) => {
   const post = await Post.findById(req.params.id);
   if (!post) return res.status(404).json({ error: "Post not found" });
   if (String(post.author) !== req.user.id) return res.status(403).json({ error: "Not allowed" });
-  const text = checkText(req.body?.content, MAX_POST, "Posts");
+  // a repost can have no words of its own; anything else must have some
+  const text = post.isRepost && req.body?.content === "" ? { value: "" } : checkText(req.body?.content, MAX_POST, "Posts");
   if (text.error) return res.status(400).json({ error: text.error });
   if (!(await allowEdit(req, res))) return;
   const beforeText = post.content;
@@ -141,7 +148,7 @@ postsRouter.patch("/:id", async (req, res) => {
     post.editedAt = new Date();
     await post.save();
   }
-  await post.populate("author");
+  await post.populate(POST_POPULATE);
   await notifyMentions({ text: post.content, before: beforeText, actorId: req.user.id, url: `/posts/${post._id}`, canSee: canSeeProfileOf(post.author) });
   const [withCount] = await withCommentCounts([post], req.user.id);
   res.json({ post: withCount });
@@ -167,6 +174,39 @@ postsRouter.put("/:id/reaction", async (req, res) => {
   res.json({ reactions: (await summarise("post", [post._id], req.user.id)).get(String(post._id)) });
 });
 
+// Share someone else's post to your own feed, with words of your own if you like: { content? }. Always shares the original (sharing a repost
+// shares what it shares). Only public profiles' posts can be shared, nobody is shared to people who couldn't open it, and the author is told.
+const repostLimiter = createLimiter({ name: "repost", limit: 30, windowMs: 60 * 60 * 1000 });
+postsRouter.post("/:id/repost", async (req, res) => {
+  const notFound = () => res.status(404).json({ error: "Post not found" });
+  if (!mongoose.isValidObjectId(req.params.id)) return notFound();
+  const target = await Post.findById(req.params.id).populate("author");
+  if (!target?.author) return notFound();
+  try {
+    await assertVisible(target.author, req.user.id);
+  } catch {
+    return notFound();
+  }
+  const original = target.isRepost ? await Post.findById(target.repostOf).populate("author") : target;
+  const owner = original?.author;
+  if (!owner || owner.isPrivate || owner.suspendedAt || (await areBlocked(req.user.id, owner._id))) return notFound();
+  if (String(owner._id) === req.user.id) return res.status(400).json({ error: "You can't share your own post" });
+  let words = "";
+  if (req.body?.content !== undefined && req.body.content !== null && req.body.content !== "") {
+    const text = checkText(req.body.content, MAX_POST, "Posts");
+    if (text.error) return res.status(400).json({ error: text.error });
+    words = text.value;
+  }
+  if (await Post.exists({ author: req.user.id, repostOf: original._id })) return res.status(409).json({ error: "You've already shared this post" });
+  if (!(await repostLimiter.allow(req.user.id))) return res.status(429).json({ error: "You're sharing too fast — try again in a bit." });
+  const shared = await Post.create({ author: req.user.id, isRepost: true, repostOf: original._id, content: words });
+  await shared.populate(POST_POPULATE);
+  await Notification.create({ recipient: owner._id, type: "repost", payload: { actorId: String(req.user.id), postId: String(shared._id) } }).catch(() => {});
+  if (words) await notifyMentions({ text: words, actorId: req.user.id, url: `/posts/${shared._id}`, canSee: canSeeProfileOf(shared.author) });
+  const [out] = await withCommentCounts([shared], req.user.id);
+  res.status(201).json({ post: out });
+});
+
 postsRouter.delete("/:id", async (req, res) => {
   const post = await Post.findById(req.params.id);
   if (!post) return res.status(404).json({ error: "Post not found" });
@@ -176,6 +216,8 @@ postsRouter.delete("/:id", async (req, res) => {
   await releasePictures(withPictures);
   await post.deleteOne();
   await forgetReactions("post", [post._id]);
+  await Save.deleteMany({ targetType: "post", target: post._id });
+  await Notification.deleteMany({ type: "repost", "payload.postId": String(post._id) });
   // An AI-generated image that only this post used would otherwise sit on
   // Cloudinary forever.
   if (post.imageUrl) await deleteStoredAssetIfUnused({ ownerId: post.author, url: post.imageUrl });

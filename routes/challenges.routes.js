@@ -8,6 +8,7 @@ import { blockedUserIds } from "../utils/visibility.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { summarise } from "../utils/reactions.js";
 import { toPublicMediaItem } from "../utils/serialize.js";
+import { savedIdsOf } from "../utils/saves.js";
 import { isLanguage } from "../utils/languages.js";
 import { previousWeek, promptFor, weekFromKey, weekOf } from "../utils/challenges.js";
 
@@ -40,9 +41,10 @@ async function entriesOf(week, viewerId) {
     return user && !user.isPrivate && !user.suspendedAt && !blocked.has(String(e.user)) && itemOf.has(String(e.item));
   });
   const summary = await summarise("media", shown.map((e) => e.item), viewerId);
+  const saved = await savedIdsOf("piece", shown.map((e) => e.item), viewerId);
   return shown.map((e) => ({
     id: e._id,
-    item: toPublicMediaItem(itemOf.get(String(e.item)), { reactions: summary.get(String(e.item)) }),
+    item: { ...toPublicMediaItem(itemOf.get(String(e.item)), { reactions: summary.get(String(e.item)) }), saved: saved.has(String(e.item)) },
     owner: person(userOf.get(String(e.user))),
     createdAt: e.createdAt,
   }));

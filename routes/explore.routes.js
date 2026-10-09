@@ -10,6 +10,8 @@ import { createLimiter } from "../utils/rateLimit.js";
 import { normalizeTag } from "../utils/hashtags.js";
 import { summarise } from "../utils/reactions.js";
 import { toPublicMediaItem, toPublicPost } from "../utils/serialize.js";
+import { savedIdsOf } from "../utils/saves.js";
+import { POST_POPULATE } from "./saves.routes.js";
 
 // Explore: the public posts and portfolio pieces of people with public profiles, newest first, optionally about one #hashtag, and the
 // topics people have been using this week. Anyone can look (nothing here is shown that a visitor couldn't open on the person's profile),
@@ -36,7 +38,7 @@ exploreRouter.use(async (req, res, next) => {
 });
 
 /** Newest-first documents (with their authors) that this viewer may be shown, `PAGE` of them, found by looking at a few batches. */
-async function scan({ model, ownerField, filter, before, blocked }) {
+async function scan({ model, ownerField, populate = ownerField, filter, before, blocked }) {
   const kept = [];
   let cursor = before;
   let exhausted = false;
@@ -45,7 +47,7 @@ async function scan({ model, ownerField, filter, before, blocked }) {
       .find({ ...filter, ...(cursor ? { _id: { $lt: cursor } } : {}) })
       .sort({ _id: -1 })
       .limit(SCAN)
-      .populate(ownerField);
+      .populate(populate);
     for (const doc of found) {
       cursor = doc._id;
       const owner = doc[ownerField];
@@ -72,17 +74,19 @@ exploreRouter.get("/", async (req, res) => {
   const filter = tag ? { tags: tag } : {};
 
   if (type === "posts") {
-    const { docs, hasMore, next } = await scan({ model: Post, ownerField: "author", filter, before, blocked });
+    const { docs, hasMore, next } = await scan({ model: Post, ownerField: "author", populate: POST_POPULATE, filter, before, blocked });
     const ids = docs.map((p) => p._id);
+    const saved = await savedIdsOf("post", ids, req.user?.id);
     const [counts, reactions] = await Promise.all([Comment.aggregate([{ $match: { post: { $in: ids } } }, { $group: { _id: "$post", count: { $sum: 1 } } }]), summarise("post", ids, req.user?.id)]);
     const countOf = new Map(counts.map((c) => [String(c._id), c.count]));
-    const posts = await Promise.all(docs.map((p) => toPublicPost(p, countOf.get(String(p._id)) || 0, req.user?.id, reactions.get(String(p._id)))));
+    const posts = await Promise.all(docs.map((p) => toPublicPost(p, countOf.get(String(p._id)) || 0, req.user?.id, reactions.get(String(p._id)), { saved: saved.has(String(p._id)) })));
     return res.json({ type, tag, posts, hasMore, next });
   }
 
   const { docs, hasMore, next } = await scan({ model: MediaItem, ownerField: "owner", filter, before, blocked });
   const reactions = await summarise("media", docs.map((i) => i._id), req.user?.id);
-  const pieces = docs.map((item) => ({ id: item._id, item: toPublicMediaItem(item, { reactions: reactions.get(String(item._id)) }), owner: person(item.owner), createdAt: item.createdAt }));
+  const savedPieces = await savedIdsOf("piece", docs.map((i) => i._id), req.user?.id);
+  const pieces = docs.map((item) => ({ id: item._id, item: { ...toPublicMediaItem(item, { reactions: reactions.get(String(item._id)) }), saved: savedPieces.has(String(item._id)) }, owner: person(item.owner), createdAt: item.createdAt }));
   res.json({ type, tag, pieces, hasMore, next });
 });
 

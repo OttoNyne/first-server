@@ -19,6 +19,7 @@ import { ProfileView } from "../models/ProfileView.js";
 import { Album } from "../models/Album.js";
 import { Credit } from "../models/Credit.js";
 import { Follow } from "../models/Follow.js";
+import { Save } from "../models/Save.js";
 import { ChallengeEntry } from "../models/ChallengeEntry.js";
 import { WorkRequest } from "../models/WorkRequest.js";
 import { GroupTopic } from "../models/GroupTopic.js";
@@ -111,6 +112,7 @@ export async function deleteAccount(userId) {
   await releasePictures(mediaComments.filter((c) => String(c.author) !== String(id)));
   await Credit.deleteMany({ $or: [{ owner: id }, { person: id }] });
   await Follow.deleteMany({ $or: [{ follower: id }, { following: id }] });
+  await Save.deleteMany({ $or: [{ user: id }, { targetType: "post", target: { $in: postIds } }, { targetType: "piece", target: { $in: mediaIds } }] });
   await ChallengeEntry.deleteMany({ user: id });
   await WorkRequest.deleteMany({ $or: [{ from: id }, { to: id }] });
   await MediaItem.deleteMany({ owner: id });

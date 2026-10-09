@@ -1,4 +1,4 @@
-import { areFriends } from "./visibility.js";
+import { areBlocked, areFriends } from "./visibility.js";
 import { emptySummary } from "./reactions.js";
 
 // Every place a User gets embedded in a response (search, friends lists,
@@ -61,7 +61,30 @@ export async function toPublicComment(comment, viewerId) {
   };
 }
 
-export async function toPublicPost(post, commentCount = 0, viewerId, reactions = emptySummary()) {
+/**
+ * The post a repost shares, as this viewer may see it: the whole thing while its author is still public (not suspended, not blocked either
+ * way with the viewer), otherwise just "unavailable", the same for a post that was deleted, so a repost can't be used to see a post the
+ * viewer couldn't open.
+ */
+async function repostView(original, viewerId) {
+  const author = original?.author;
+  if (!original?._id || !author?._id || author.isPrivate || author.suspendedAt || (viewerId && (await areBlocked(viewerId, author._id)))) return { available: false };
+  return {
+    available: true,
+    id: original._id,
+    authorId: author._id,
+    author: await toPublicUser(author, viewerId),
+    content: original.content,
+    imageUrl: original.imageUrl,
+    imageAspect: original.imageAspect ?? null,
+    imageZoom: original.imageZoom ?? null,
+    imagePosition: original.imagePosition ?? null,
+    createdAt: original.createdAt,
+  };
+}
+
+// extras: { saved } (whether the viewer has saved it)
+export async function toPublicPost(post, commentCount = 0, viewerId, reactions = emptySummary(), extras = {}) {
   return {
     id: post._id,
     authorId: post.author?._id ?? post.author,
@@ -77,5 +100,8 @@ export async function toPublicPost(post, commentCount = 0, viewerId, reactions =
     editedAt: post.editedAt ?? null,
     commentCount,
     reactions,
+    isRepost: Boolean(post.isRepost),
+    repost: post.isRepost ? await repostView(post.repostOf, viewerId) : null,
+    saved: extras.saved === true,
   };
 }
