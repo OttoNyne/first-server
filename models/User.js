@@ -43,6 +43,10 @@ const userSchema = new mongoose.Schema(
     featuredPiece: { type: mongoose.Schema.Types.ObjectId, ref: "MediaItem", default: null },
     // Words and phrases they don't want to see in their feed and Explore (lower-cased; see utils/mutes.js). Private to them.
     mutedWords: { type: [String], default: [] },
+    // The weekly summary by email (off unless they turn it on): when the next one is due, and how far back it looks. See services/digest.js.
+    weeklyDigest: { type: Boolean, default: false },
+    digestNextAt: { type: Date, default: null },
+    digestSinceAt: { type: Date, default: null },
     // The order of the sections below the introduction, and which of them are hidden (see utils/profileSections.js).
     sectionOrder: { type: [String], default: [] },
     hiddenSections: { type: [String], default: [] },

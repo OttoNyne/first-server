@@ -15,6 +15,7 @@ import { toPublicMediaItem, toPublicPost } from "../utils/serialize.js";
 import { savedIdsOf } from "../utils/saves.js";
 import { pollTallies } from "../utils/polls.js";
 import { POST_POPULATE } from "./saves.routes.js";
+import { followedTags } from "./topics.routes.js";
 
 // Explore: the public posts and portfolio pieces of people with public profiles, newest first, optionally about one #hashtag, and the
 // topics people have been using this week. Anyone can look (nothing here is shown that a visitor couldn't open on the person's profile),
@@ -76,7 +77,14 @@ exploreRouter.get("/", async (req, res) => {
   // people blocked either way, and (quietly) the people and words this viewer muted
   const blocked = req.user ? new Set([...(await blockedUserIds(req.user.id)), ...(await mutedUserIds(req.user.id))]) : new Set();
   const matches = req.user ? wordMatcher((await User.findById(req.user.id).select("mutedWords"))?.mutedWords) : null;
-  const filter = tag ? { tags: tag } : {};
+  // ?mine=1 (signed in): what is posted about the topics you follow
+  let filter = tag ? { tags: tag } : {};
+  if (!tag && req.query.mine === "1") {
+    if (!req.user) return res.status(401).json({ error: "Sign in to see your topics" });
+    const topics = await followedTags(req.user.id);
+    if (!topics.length) return res.json({ type, tag: null, ...(type === "posts" ? { posts: [] } : { pieces: [] }), hasMore: false, next: null });
+    filter = { tags: { $in: topics } };
+  }
 
   if (type === "posts") {
     const { docs, hasMore, next } = await scan({ model: Post, ownerField: "author", populate: POST_POPULATE, filter, before, blocked, hidden: (post) => postHidden(post, matches) });

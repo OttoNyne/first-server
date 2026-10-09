@@ -27,6 +27,8 @@ import { mediaCommentsRouter } from "./routes/mediaComments.routes.js";
 import { processRouter } from "./routes/process.routes.js";
 import { callsRouter } from "./routes/calls.routes.js";
 import { projectsRouter } from "./routes/projects.routes.js";
+import { topicsRouter } from "./routes/topics.routes.js";
+import { digestRouter } from "./routes/digest.routes.js";
 import { eventsRouter } from "./routes/events.routes.js";
 import { aboutRouter } from "./routes/about.routes.js";
 import { notificationsRouter } from "./routes/notifications.routes.js";
@@ -125,6 +127,8 @@ app.use("/api/media", mediaCommentsRouter);
 app.use("/api/media", processRouter);
 app.use("/api/calls", callsRouter);
 app.use("/api/projects", projectsRouter);
+app.use("/api/topics", topicsRouter);
+app.use("/api/digest", digestRouter);
 app.use("/api/events", eventsRouter);
 app.use("/api/about", aboutRouter);
 // invite previews are public (the person opening the link isn't signed in), so this goes before moderationRouter, which asks for a sign-in on everything under /api

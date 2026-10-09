@@ -14,7 +14,9 @@ vi.mock("../utils/mailer.js", () => ({
 }));
 
 // every value a text can be given, each one a word that can't be mistaken for anything else
-const PARAMS = { name: "NAME_ZED", link: "https://site.example/x#token=LINKTOKEN", username: "USER_ZED", masked: "m****@example.com", keyName: "KEY_ZED", device: "DEVICE_ZED", when: "WHEN_ZED", removedPasskeys: true };
+const PARAMS = { name: "NAME_ZED", link: "https://site.example/x#token=LINKTOKEN", username: "USER_ZED", masked: "m****@example.com", keyName: "KEY_ZED", device: "DEVICE_ZED", when: "WHEN_ZED", removedPasskeys: true,
+  // the weekly summary
+  followers: 2, activity: 3, requests: 1, roomsUnread: 4, calls: [{ title: "CALL_ZED" }], topics: [{ tag: "tagzed", n: 5 }], site: "https://site.example", topicsLink: "https://site.example/explore?mine=1", callsLink: "https://site.example/calls", roomsLink: "https://site.example/projects", unsubscribe: "https://site.example/digest/unsubscribe#token=UNSUBTOKEN" };
 
 describe("which language an email is in", () => {
   it("knows the site's languages, and treats anything else as English", () => {

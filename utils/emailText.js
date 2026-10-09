@@ -16,6 +16,18 @@ const hi = {
 
 const join = (lang, name, ...parts) => [hi[lang](name), ...parts].join("\n\n");
 
+/** The body of the weekly summary in one language: only the lines that have something in them. */
+function digestText(lang, p, w) {
+  const lines = [];
+  if (p.followers > 0) lines.push(`• ${w.followers}: ${p.followers}`);
+  if (p.activity > 0) lines.push(`• ${w.activity}: ${p.activity}`);
+  if (p.requests > 0) lines.push(`• ${w.requests}: ${p.requests}`);
+  if (p.roomsUnread > 0) lines.push(`• ${w.rooms}: ${p.roomsUnread}\n  ${p.roomsLink}`);
+  if (p.calls?.length) lines.push(`• ${w.calls}\n${p.calls.map((c) => `  - ${c.title}`).join("\n")}\n  ${p.callsLink}`);
+  if (p.topics?.length) lines.push(`• ${w.topics}\n${p.topics.map((x) => `  - #${x.tag}: ${x.n}`).join("\n")}\n  ${p.topicsLink}`);
+  return join(lang, p.name, w.intro, lines.join("\n"), `${w.open} ${p.site}`, `${w.stop}\n${p.unsubscribe}\n${w.also}`);
+}
+
 const KINDS = {
   // Someone asked to reset a password: p = { name, link }
   resetLink: {
@@ -212,6 +224,55 @@ const KINDS = {
         "وإذا لم تكن أنت، فغيّر كلمة المرور فورًا (فذلك ينهي جلسات جميع الأجهزة الأخرى) وفعّل تسجيل الدخول بخطوتين، من إعدادات ملفك الشخصي في الحالتين.",
         "يمكنك إيقاف هذه الرسائل من «الأجهزة المسجَّل الدخول عليها» في إعدادات ملفك الشخصي."
       ),
+    }),
+  },
+  // The weekly summary: p = { name, followers, activity, requests, roomsUnread, calls: [{title}], topics: [{tag, n}], site, topicsLink, callsLink, roomsLink, unsubscribe }.
+  // Counts and titles only, never anyone's words. Lines for things that are zero are left out.
+  weeklyDigest: {
+    en: (p) => ({
+      subject: "Your week on CreativesSelect",
+      text: digestText("en", p, {
+        intro: "Here is what has happened since your last summary:",
+        followers: "New followers",
+        activity: "Comments, replies and mentions",
+        requests: "Friend requests waiting",
+        rooms: "New messages in your project rooms",
+        calls: "Open calls that fit what you offer:",
+        topics: "New in the topics you follow:",
+        open: "Open CreativesSelect:",
+        stop: "To stop these emails, open this link (no sign-in needed):",
+        also: "You can also switch them off in your profile settings.",
+      }),
+    }),
+    es: (p) => ({
+      subject: "Tu semana en CreativesSelect",
+      text: digestText("es", p, {
+        intro: "Esto es lo que ha pasado desde tu último resumen:",
+        followers: "Nuevos seguidores",
+        activity: "Comentarios, respuestas y menciones",
+        requests: "Solicitudes de amistad pendientes",
+        rooms: "Mensajes nuevos en tus salas de proyecto",
+        calls: "Convocatorias abiertas que encajan con lo que ofreces:",
+        topics: "Novedades en los temas que sigues:",
+        open: "Abrir CreativesSelect:",
+        stop: "Para dejar de recibir estos correos, abre este enlace (no hace falta iniciar sesión):",
+        also: "También puedes desactivarlos en los ajustes de tu perfil.",
+      }),
+    }),
+    ar: (p) => ({
+      subject: "أسبوعك في CreativesSelect",
+      text: digestText("ar", p, {
+        intro: "هذا ما حدث منذ ملخصك الأخير:",
+        followers: "متابعون جدد",
+        activity: "التعليقات والردود والإشارات",
+        requests: "طلبات صداقة بانتظارك",
+        rooms: "رسائل جديدة في غرف مشاريعك",
+        calls: "دعوات مفتوحة تناسب ما تقدمه:",
+        topics: "جديد في المواضيع التي تتابعها:",
+        open: "افتح CreativesSelect:",
+        stop: "لإيقاف هذه الرسائل، افتح هذا الرابط (لا حاجة لتسجيل الدخول):",
+        also: "يمكنك أيضًا إيقافها من إعدادات ملفك الشخصي.",
+      }),
     }),
   },
 };

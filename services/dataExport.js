@@ -32,6 +32,7 @@ import { Follow } from "../models/Follow.js";
 import { Save } from "../models/Save.js";
 import { PollVote } from "../models/PollVote.js";
 import { Mute } from "../models/Mute.js";
+import { TagFollow } from "../models/TagFollow.js";
 import { Project } from "../models/Project.js";
 import { ProjectMessage } from "../models/ProjectMessage.js";
 import { ProcessStep } from "../models/ProcessStep.js";
@@ -103,6 +104,7 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
   const appliedTo = new Map((await Call.find({ _id: { $in: applicationRows.map((a) => a.call) } }).select("title").lean()).map((c) => [String(c._id), c.title]));
   const roomRows = await rows("projects", Project.find({ members: id }));
   const roomMessageRows = await rows("projectMessages", ProjectMessage.find({ author: id }));
+  const topicRows = await rows("followedTopics", TagFollow.find({ user: id }));
   const muteRows = await rows("muted", Mute.find({ user: id }));
   const muteNames = (await User.find({ _id: { $in: muteRows.map((m) => m.muted) } }).select("username").lean()).map((u) => u.username);
   const followNames = (await User.find({ _id: { $in: followRows.map((f) => f.following) } }).select("username").lean()).map((u) => u.username);
@@ -200,6 +202,8 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
     projects: roomRows.map((p) => ({ id: String(p._id), title: text(p.title), role: String(p.owner) === String(id) ? "owner" : "member", status: p.status, started: iso(p.createdAt) })),
     projectMessages: roomMessageRows.map((m) => ({ project: String(m.project), text: text(m.content), pictureUrl: m.imageUrl ?? null, written: iso(m.createdAt) })),
     processSteps: stepRows.map((s) => ({ piece: String(s.piece), position: s.position, text: text(s.content), pictureUrl: s.imageUrl ?? null, added: iso(s.createdAt), edited: iso(s.editedAt) })),
+    followedTopics: topicRows.map((r) => r.tag),
+    weeklySummary: user.weeklyDigest === true,
     muted: { people: muteNames, words: user.mutedWords ?? [] },
     pollVotes: voteRows.map((v) => ({ post: String(v.post), choice: voted.get(String(v.post))?.[v.option] ?? null, votedAt: v.createdAt })),
     saved: { posts: savedRows.filter((s) => s.targetType === "post").map((s) => String(s.target)), pieces: savedRows.filter((s) => s.targetType === "piece").map((s) => String(s.target)) },

@@ -22,6 +22,7 @@ import { Follow } from "../models/Follow.js";
 import { Save } from "../models/Save.js";
 import { PollVote } from "../models/PollVote.js";
 import { Mute } from "../models/Mute.js";
+import { TagFollow } from "../models/TagFollow.js";
 import { Project } from "../models/Project.js";
 import { ProjectMessage } from "../models/ProjectMessage.js";
 import { deleteProject, removeMember } from "./projects.js";
@@ -131,6 +132,7 @@ export async function deleteAccount(userId) {
   const callIds = (await Call.find({ owner: id }).select("_id")).map((c) => c._id);
   await CallApplication.deleteMany({ $or: [{ applicant: id }, { call: { $in: callIds } }] });
   await Call.deleteMany({ owner: id });
+  await TagFollow.deleteMany({ user: id });
   await Mute.deleteMany({ $or: [{ user: id }, { muted: id }] });
   await PollVote.deleteMany({ $or: [{ user: id }, { post: { $in: postIds } }] });
   await ChallengeEntry.deleteMany({ user: id });
