@@ -8,6 +8,7 @@ import { Save } from "../models/Save.js";
 import { Notification } from "../models/Notification.js";
 import { savedIdsOf } from "../utils/saves.js";
 import { areBlocked } from "../utils/visibility.js";
+import { cleanLine } from "../utils/profileFields.js";
 import { requireAuth } from "../middleware/auth.js";
 import { releasePictures } from "../services/commentPictures.js";
 import { toPublicPost } from "../utils/serialize.js";
@@ -110,9 +111,21 @@ function readFraming(body) {
   return { framing: out };
 }
 
+export const MAX_ALT = 300;
+/** A picture's description: one line of plain text up to 300 characters, or nothing. Returns { value } or { error }. */
+function readAlt(value) {
+  if (value === undefined || value === null) return { value: "" };
+  if (typeof value !== "string") return { error: "A picture description must be text" };
+  const text = cleanLine(value);
+  if ([...text].length > MAX_ALT) return { error: `A picture description can be up to ${MAX_ALT} characters` };
+  return { value: text };
+}
+
 postsRouter.post("/", async (req, res) => {
   const { framing, error } = readFraming(req.body);
   if (error) return res.status(400).json({ error });
+  const alt = req.body?.imageUrl ? readAlt(req.body?.imageAlt) : { value: "" };
+  if (alt.error) return res.status(400).json({ error: alt.error });
   const text = checkText(req.body?.content, MAX_POST, "Posts");
   if (text.error) return res.status(400).json({ error: text.error });
   if (!(await postLimiter.allow(req.user.id))) {
@@ -124,6 +137,7 @@ postsRouter.post("/", async (req, res) => {
     content: text.value,
     imageUrl: req.body.imageUrl,
     ...(req.body.imageUrl ? framing : {}),
+    imageAlt: alt.value,
     isAiText: req.body.isAiText || false,
     isAiImage: req.body.isAiImage || false,
   });
@@ -132,20 +146,28 @@ postsRouter.post("/", async (req, res) => {
   res.status(201).json({ post: await toPublicPost(post, 0, req.user.id) });
 });
 
-// Change the words of your own post (the picture and its framing stay as they are). Marked as edited.
+// Change the words of your own post and/or the description of its picture (the picture and its framing stay as they are). Changed words mark it as edited.
 postsRouter.patch("/:id", async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: "Post not found" });
   const post = await Post.findById(req.params.id);
   if (!post) return res.status(404).json({ error: "Post not found" });
   if (String(post.author) !== req.user.id) return res.status(403).json({ error: "Not allowed" });
-  // a repost can have no words of its own; anything else must have some
-  const text = post.isRepost && req.body?.content === "" ? { value: "" } : checkText(req.body?.content, MAX_POST, "Posts");
+  const wantsAlt = req.body !== undefined && req.body !== null && Object.hasOwn(req.body, "imageAlt");
+  const alt = wantsAlt ? readAlt(req.body.imageAlt) : null;
+  if (alt?.error) return res.status(400).json({ error: alt.error });
+  if (wantsAlt && !post.imageUrl) return res.status(400).json({ error: "That post has no picture" });
+  // a repost can have no words of its own; anything else must have some (unless only the picture's description is being changed)
+  const text = wantsAlt && !Object.hasOwn(req.body, "content") ? { value: post.content } : post.isRepost && req.body?.content === "" ? { value: "" } : checkText(req.body?.content, MAX_POST, "Posts");
   if (text.error) return res.status(400).json({ error: text.error });
   if (!(await allowEdit(req, res))) return;
   const beforeText = post.content;
-  if (text.value !== post.content) {
-    post.content = text.value;
-    post.editedAt = new Date();
+  const wordsChanged = text.value !== post.content;
+  if (wordsChanged || (alt && alt.value !== post.imageAlt)) {
+    if (wordsChanged) {
+      post.content = text.value;
+      post.editedAt = new Date();
+    }
+    if (alt) post.imageAlt = alt.value;
     await post.save();
   }
   await post.populate(POST_POPULATE);

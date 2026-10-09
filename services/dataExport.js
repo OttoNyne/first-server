@@ -162,7 +162,7 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
       twoStepSignInOn: Boolean(user.twoFactor?.enabled),
       previousUsernames: oldNames.map((o) => o.username),
     },
-    posts: posts.map((p) => ({ id: String(p._id), text: text(p.content), pictureUrl: p.imageUrl ?? null, madeWithAi: Boolean(p.isAiText || p.isAiImage), posted: iso(p.createdAt), edited: iso(p.editedAt), sharedPost: p.isRepost ? String(p.repostOf) : null })),
+    posts: posts.map((p) => ({ id: String(p._id), text: text(p.content), pictureUrl: p.imageUrl ?? null, pictureDescription: text(p.imageAlt), madeWithAi: Boolean(p.isAiText || p.isAiImage), posted: iso(p.createdAt), edited: iso(p.editedAt), sharedPost: p.isRepost ? String(p.repostOf) : null })),
     comments: comments.map((c) => ({ id: String(c._id), onPost: String(c.post), text: text(c.content), pictureUrl: c.imageUrl ?? null, posted: iso(c.createdAt), edited: iso(c.editedAt) })),
     testimonialsYouWrote: testimonials.map((c) => ({ id: String(c._id), onProfileOf: who(c.profileOwner), text: text(c.content), pictureUrl: c.imageUrl ?? null, posted: iso(c.createdAt), edited: iso(c.editedAt) })),
     blogEntries: blogEntries.map((b) => ({ id: String(b._id), title: text(b.title), text: text(b.body), posted: iso(b.createdAt), edited: iso(b.updatedAt) })),

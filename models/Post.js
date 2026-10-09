@@ -16,6 +16,8 @@ const postSchema = new mongoose.Schema(
     imageAspect: { type: String, enum: ["original", "1:1", "4:3", "16:9"] },
     imageZoom: { type: Number, min: 1, max: 3 },
     imagePosition: { type: String },
+    // What the picture shows, in the author's words, for people who can't see it (the picture's alternative text).
+    imageAlt: { type: String, default: "", maxlength: 300 },
     isAiText: { type: Boolean, default: false },
     isAiImage: { type: Boolean, default: false },
     // The #hashtags in the words, lower-cased (always worked out from the content; see utils/hashtags.js).

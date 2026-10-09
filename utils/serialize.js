@@ -79,6 +79,7 @@ async function repostView(original, viewerId) {
     imageAspect: original.imageAspect ?? null,
     imageZoom: original.imageZoom ?? null,
     imagePosition: original.imagePosition ?? null,
+    imageAlt: original.imageAlt ?? "",
     createdAt: original.createdAt,
   };
 }
@@ -94,6 +95,7 @@ export async function toPublicPost(post, commentCount = 0, viewerId, reactions =
     imageAspect: post.imageAspect ?? null,
     imageZoom: post.imageZoom ?? null,
     imagePosition: post.imagePosition ?? null,
+    imageAlt: post.imageAlt ?? "",
     isAiText: post.isAiText,
     isAiImage: post.isAiImage,
     createdAt: post.createdAt,
