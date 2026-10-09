@@ -31,6 +31,7 @@ import { Credit } from "../models/Credit.js";
 import { Follow } from "../models/Follow.js";
 import { Save } from "../models/Save.js";
 import { PollVote } from "../models/PollVote.js";
+import { Mute } from "../models/Mute.js";
 import { ChallengeEntry } from "../models/ChallengeEntry.js";
 import { WorkRequest } from "../models/WorkRequest.js";
 
@@ -91,6 +92,8 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
   const creditsAccepted = await rows("creditsAccepted", Credit.find({ person: id, status: "accepted" }));
   const challengeEntries = await rows("challengeEntries", ChallengeEntry.find({ user: id }));
   const followRows = await rows("following", Follow.find({ follower: id }));
+  const muteRows = await rows("muted", Mute.find({ user: id }));
+  const muteNames = (await User.find({ _id: { $in: muteRows.map((m) => m.muted) } }).select("username").lean()).map((u) => u.username);
   const followNames = (await User.find({ _id: { $in: followRows.map((f) => f.following) } }).select("username").lean()).map((u) => u.username);
   const savedRows = await rows("saved", Save.find({ user: id }));
   // the answers you gave in other people's polls: which post, and the option you chose
@@ -181,6 +184,7 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
       commentsYouWrote: mediaComments.map((c) => ({ id: String(c._id), onPiece: String(c.item), text: text(c.content), pictureUrl: c.imageUrl ?? null, posted: iso(c.createdAt) })),
     },
     following: followNames,
+    muted: { people: muteNames, words: user.mutedWords ?? [] },
     pollVotes: voteRows.map((v) => ({ post: String(v.post), choice: voted.get(String(v.post))?.[v.option] ?? null, votedAt: v.createdAt })),
     saved: { posts: savedRows.filter((s) => s.targetType === "post").map((s) => String(s.target)), pieces: savedRows.filter((s) => s.targetType === "piece").map((s) => String(s.target)) },
     workRequests: {

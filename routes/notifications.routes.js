@@ -5,6 +5,7 @@ import { Friendship } from "../models/Friendship.js";
 import { User } from "../models/User.js";
 import { requireAuth } from "../middleware/auth.js";
 import { toPublicUser } from "../utils/serialize.js";
+import { mutedUserIds } from "../utils/mutes.js";
 import { processDueReminders } from "../services/scheduledLives.js";
 import { processDueEventReminders } from "../services/events.js";
 import { processBirthdays } from "../services/birthdays.js";
@@ -19,6 +20,9 @@ notificationsRouter.get("/", async (req, res) => {
   await processBirthdays().catch((err) => console.error("Birthday check failed:", err.message));
   // Newest first, thirty at a time; ?before=<notification id> asks for the ones older than that.
   const filter = { recipient: req.user.id };
+  // nothing from the people they muted
+  const muted = [...(await mutedUserIds(req.user.id))];
+  if (muted.length) filter["payload.actorId"] = { $nin: muted };
   if (typeof req.query.before === "string" && mongoose.isValidObjectId(req.query.before)) filter._id = { $lt: req.query.before };
   const found = await Notification.find(filter).sort({ _id: -1 }).limit(31);
   const notifications = found.slice(0, 30);

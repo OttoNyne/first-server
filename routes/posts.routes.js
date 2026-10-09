@@ -9,6 +9,7 @@ import { Save } from "../models/Save.js";
 import { Notification } from "../models/Notification.js";
 import { savedIdsOf } from "../utils/saves.js";
 import { PollVote } from "../models/PollVote.js";
+import { mutedUserIds, postHidden, wordMatcher } from "../utils/mutes.js";
 import { hasPoll, isClosed, pollTallies, publicPoll, readPoll } from "../utils/polls.js";
 import { areBlocked } from "../utils/visibility.js";
 import { cleanLine } from "../utils/profileFields.js";
@@ -24,6 +25,8 @@ import { createLimiter } from "../utils/rateLimit.js";
 import { checkEmoji, forgetReactions, notifyOfReaction, setReaction, summarise } from "../utils/reactions.js";
 
 const PAGE = 20;
+const FEED_SCAN = 60; // posts looked at in one go when words are muted
+const FEED_ROUNDS = 4;
 const postLimiter = createLimiter({ name: "post-create", limit: 20, windowMs: 10 * 60 * 1000 });
 
 export const postsRouter = Router();
@@ -52,13 +55,35 @@ postsRouter.get("/feed", async (req, res) => {
 
   // Newest first, twenty at a time; ?before=<post id> asks for the ones older than that.
   // yourself, your friends, and the public profiles you follow
-  const filter = { author: { $in: [req.user.id, ...friendIds, ...(await followedAuthorIds(req.user.id))] } };
+  // minus the people they muted, and the posts with words they muted
+  const muted = await mutedUserIds(req.user.id);
+  const authors = [req.user.id, ...friendIds, ...(await followedAuthorIds(req.user.id))].filter((id) => !muted.has(String(id)));
+  const filter = { author: { $in: authors } };
   const before = cursorFilter(req.query, mongoose);
   if (before) filter._id = { $lt: before };
-  const found = await Post.find(filter).sort({ _id: -1 }).limit(PAGE + 1).populate(POST_POPULATE);
-  const posts = found.slice(0, PAGE);
-
-  res.json({ posts: await withCommentCounts(posts, req.user.id), hasMore: found.length > PAGE });
+  const matches = wordMatcher((await User.findById(req.user.id).select("mutedWords"))?.mutedWords);
+  if (!matches) {
+    const found = await Post.find(filter).sort({ _id: -1 }).limit(PAGE + 1).populate(POST_POPULATE);
+    return res.json({ posts: await withCommentCounts(found.slice(0, PAGE), req.user.id), hasMore: found.length > PAGE });
+  }
+  // with muted words, look at a few batches to fill a page
+  const kept = [];
+  let cursor = before;
+  let exhausted = false;
+  for (let round = 0; round < FEED_ROUNDS && kept.length <= PAGE; round++) {
+    const found = await Post.find({ ...filter, ...(cursor ? { _id: { $lt: cursor } } : {}) }).sort({ _id: -1 }).limit(FEED_SCAN).populate(POST_POPULATE);
+    for (const post of found) {
+      cursor = post._id;
+      if (!postHidden(post, matches)) kept.push(post);
+      if (kept.length > PAGE) break;
+    }
+    if (found.length < FEED_SCAN) {
+      exhausted = true;
+      break;
+    }
+  }
+  const posts = kept.slice(0, PAGE);
+  res.json({ posts: await withCommentCounts(posts, req.user.id), hasMore: kept.length > PAGE || (!exhausted && kept.length > 0) });
 });
 
 postsRouter.get("/user/:username", async (req, res) => {

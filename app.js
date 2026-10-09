@@ -20,6 +20,7 @@ import { previewRouter } from "./routes/preview.routes.js";
 import { challengesRouter } from "./routes/challenges.routes.js";
 import { mentionsRouter } from "./routes/mentions.routes.js";
 import { followsRouter } from "./routes/follows.routes.js";
+import { mutesRouter } from "./routes/mutes.routes.js";
 import { exploreRouter } from "./routes/explore.routes.js";
 import { savesRouter } from "./routes/saves.routes.js";
 import { mediaCommentsRouter } from "./routes/mediaComments.routes.js";
@@ -113,6 +114,7 @@ app.use("/api/preview", previewRouter);
 app.use("/api/challenges", challengesRouter);
 app.use("/api/mentions", mentionsRouter);
 app.use("/api/follows", followsRouter);
+app.use("/api/mutes", mutesRouter);
 // Explore can be looked at without signing in, so it goes before moderationRouter
 app.use("/api/explore", exploreRouter);
 app.use("/api/saves", savesRouter);

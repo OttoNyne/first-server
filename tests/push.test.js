@@ -335,6 +335,23 @@ describe("push notifications", () => {
       expect(sent).toHaveLength(2);
     });
 
+    it("sends nothing about someone the person muted, and goes on sending about the rest", async () => {
+      const a = await signup(app, "alice");
+      const b = await signup(app, "bob");
+      const c = await signup(app, "carol");
+      await befriend(a, b);
+      await befriend(c, b);
+      await on(b, chrome("bobs"));
+      sent.length = 0;
+      await b.agent.put("/api/mutes/people/alice");
+      await a.agent.post("/api/messages/with/bob").send({ body: "hello" });
+      await settle();
+      expect(sent).toHaveLength(0);
+      await c.agent.post("/api/messages/with/bob").send({ body: "hello from carol" });
+      await settle();
+      expect(sent).toHaveLength(1);
+    });
+
     it("sends nothing to a suspended account, or to someone with no devices, and still makes the notification", async () => {
       const a = await signup(app, "alice");
       const b = await signup(app, "bob");

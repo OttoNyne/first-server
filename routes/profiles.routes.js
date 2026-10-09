@@ -17,6 +17,7 @@ import { MAX_LISTENING, MAX_MOOD, MAX_WORK_NOTE, checkLine, checkOffers, checkTa
 import { checkHidden, checkOrder } from "../utils/profileSections.js";
 import { areFriends, blockedUserIds, getProfileForViewer } from "../utils/visibility.js";
 import { Follow } from "../models/Follow.js";
+import { Mute } from "../models/Mute.js";
 import { Post } from "../models/Post.js";
 import { POST_POPULATE } from "./saves.routes.js";
 import { withCommentCounts } from "./posts.routes.js";
@@ -345,7 +346,7 @@ profilesRouter.get("/:username", attachUserIfPresent, async (req, res) => {
     const whole = !user.isPrivate || isFriend || String(user._id) === String(req.user?.id);
     const following = whole ? { followerCount: await Follow.countDocuments({ following: user._id }), followingCount: await Follow.countDocuments({ follower: user._id }), ...(req.user && String(user._id) !== req.user.id ? { iFollow: Boolean(await Follow.exists({ follower: req.user.id, following: user._id })) } : {}) } : {};
     // the post pinned to the top of the profile (the portfolio puts the featured piece first by itself)
-    const first = {};
+    const first = req.user && String(user._id) !== req.user.id ? { iMute: Boolean(await Mute.exists({ user: req.user.id, muted: user._id })) } : {};
     if (whole) {
       const pinned = user.pinnedPost ? await Post.findOne({ _id: user.pinnedPost, author: user._id }).populate(POST_POPULATE) : null;
       first.pinnedPost = pinned ? (await withCommentCounts([pinned], req.user?.id))[0] : null;

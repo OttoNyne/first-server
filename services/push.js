@@ -1,6 +1,7 @@
 import webpush from "web-push";
 import { PushSubscription } from "../models/PushSubscription.js";
 import { User } from "../models/User.js";
+import { Mute } from "../models/Mute.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { categoryOf } from "../utils/pushInput.js";
 import { emojiOf } from "../utils/reactionKeys.js";
@@ -160,9 +161,13 @@ async function deliver(notifications) {
   const recipientOf = new Map(recipients.map((u) => [String(u._id), u]));
   const actorOf = new Map(actors.map((u) => [String(u._id), u]));
 
+  // people who muted the one it is about hear nothing of it
+  const muting = new Set((await Mute.find({ user: { $in: [...subsOf.keys()] }, muted: { $in: [...actorOf.keys()] } }).select("user muted").lean()).map((m) => `${m.user}:${m.muted}`));
+
   const jobs = [];
   for (const n of notifications) {
     const who = String(n.recipient);
+    if (muting.has(`${who}:${n.payload?.actorId}`)) continue;
     const person = recipientOf.get(who);
     const category = categoryOf(n.type);
     if (!person || person.suspendedAt || !category || !subsOf.has(who)) continue;

@@ -5,6 +5,8 @@ import { Comment } from "../models/Comment.js";
 import { MediaItem } from "../models/MediaItem.js";
 import { attachUserIfPresent } from "../middleware/auth.js";
 import { blockedUserIds } from "../utils/visibility.js";
+import { mutedUserIds, pieceHidden, postHidden, wordMatcher } from "../utils/mutes.js";
+import { User } from "../models/User.js";
 import { clientIp } from "../utils/clientIp.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { normalizeTag } from "../utils/hashtags.js";
@@ -39,7 +41,7 @@ exploreRouter.use(async (req, res, next) => {
 });
 
 /** Newest-first documents (with their authors) that this viewer may be shown, `PAGE` of them, found by looking at a few batches. */
-async function scan({ model, ownerField, populate = ownerField, filter, before, blocked }) {
+async function scan({ model, ownerField, populate = ownerField, filter, before, blocked, hidden = () => false }) {
   const kept = [];
   let cursor = before;
   let exhausted = false;
@@ -52,7 +54,7 @@ async function scan({ model, ownerField, populate = ownerField, filter, before, 
     for (const doc of found) {
       cursor = doc._id;
       const owner = doc[ownerField];
-      if (owner && !owner.isPrivate && !owner.suspendedAt && !blocked.has(String(owner._id))) kept.push(doc);
+      if (owner && !owner.isPrivate && !owner.suspendedAt && !blocked.has(String(owner._id)) && !hidden(doc)) kept.push(doc);
       if (kept.length > PAGE) break;
     }
     if (found.length < SCAN) {
@@ -71,11 +73,13 @@ exploreRouter.get("/", async (req, res) => {
   const tag = asked ? normalizeTag(asked) : null;
   if (asked && !tag) return res.status(400).json({ error: "That isn't a topic you can search for" });
   const before = cursorOf(req.query.before);
-  const blocked = req.user ? await blockedUserIds(req.user.id) : new Set();
+  // people blocked either way, and (quietly) the people and words this viewer muted
+  const blocked = req.user ? new Set([...(await blockedUserIds(req.user.id)), ...(await mutedUserIds(req.user.id))]) : new Set();
+  const matches = req.user ? wordMatcher((await User.findById(req.user.id).select("mutedWords"))?.mutedWords) : null;
   const filter = tag ? { tags: tag } : {};
 
   if (type === "posts") {
-    const { docs, hasMore, next } = await scan({ model: Post, ownerField: "author", populate: POST_POPULATE, filter, before, blocked });
+    const { docs, hasMore, next } = await scan({ model: Post, ownerField: "author", populate: POST_POPULATE, filter, before, blocked, hidden: (post) => postHidden(post, matches) });
     const ids = docs.map((p) => p._id);
     const saved = await savedIdsOf("post", ids, req.user?.id);
     const [counts, reactions] = await Promise.all([Comment.aggregate([{ $match: { post: { $in: ids } } }, { $group: { _id: "$post", count: { $sum: 1 } } }]), summarise("post", ids, req.user?.id)]);
@@ -85,7 +89,7 @@ exploreRouter.get("/", async (req, res) => {
     return res.json({ type, tag, posts, hasMore, next });
   }
 
-  const { docs, hasMore, next } = await scan({ model: MediaItem, ownerField: "owner", filter, before, blocked });
+  const { docs, hasMore, next } = await scan({ model: MediaItem, ownerField: "owner", filter, before, blocked, hidden: (item) => pieceHidden(item, matches) });
   const reactions = await summarise("media", docs.map((i) => i._id), req.user?.id);
   const savedPieces = await savedIdsOf("piece", docs.map((i) => i._id), req.user?.id);
   const pieces = docs.map((item) => ({ id: item._id, item: { ...toPublicMediaItem(item, { reactions: reactions.get(String(item._id)) }), saved: savedPieces.has(String(item._id)) }, owner: person(item.owner), createdAt: item.createdAt }));

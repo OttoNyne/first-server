@@ -41,6 +41,8 @@ const userSchema = new mongoose.Schema(
     // What the profile puts first: one of their own posts (pinned) and one of their own portfolio pieces (featured). Null when nothing is.
     pinnedPost: { type: mongoose.Schema.Types.ObjectId, ref: "Post", default: null },
     featuredPiece: { type: mongoose.Schema.Types.ObjectId, ref: "MediaItem", default: null },
+    // Words and phrases they don't want to see in their feed and Explore (lower-cased; see utils/mutes.js). Private to them.
+    mutedWords: { type: [String], default: [] },
     // The order of the sections below the introduction, and which of them are hidden (see utils/profileSections.js).
     sectionOrder: { type: [String], default: [] },
     hiddenSections: { type: [String], default: [] },
