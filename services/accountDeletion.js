@@ -22,6 +22,9 @@ import { Follow } from "../models/Follow.js";
 import { Save } from "../models/Save.js";
 import { PollVote } from "../models/PollVote.js";
 import { Mute } from "../models/Mute.js";
+import { Project } from "../models/Project.js";
+import { ProjectMessage } from "../models/ProjectMessage.js";
+import { deleteProject, removeMember } from "./projects.js";
 import { ProcessStep } from "../models/ProcessStep.js";
 import { Call } from "../models/Call.js";
 import { CallApplication } from "../models/CallApplication.js";
@@ -118,6 +121,12 @@ export async function deleteAccount(userId) {
   await Credit.deleteMany({ $or: [{ owner: id }, { person: id }] });
   await Follow.deleteMany({ $or: [{ follower: id }, { following: id }] });
   await Save.deleteMany({ $or: [{ user: id }, { targetType: "post", target: { $in: postIds } }, { targetType: "piece", target: { $in: mediaIds } }] });
+  // project rooms: the ones they own go, in the others they simply leave and what they wrote goes with them
+  for (const room of await Project.find({ owner: id })) await deleteProject(room);
+  for (const room of await Project.find({ members: id })) await removeMember(room, id);
+  const roomMessages = await ProjectMessage.find({ author: id });
+  await ProjectMessage.deleteMany({ author: id });
+  await releasePictures(roomMessages);
   await ProcessStep.deleteMany({ owner: id });
   const callIds = (await Call.find({ owner: id }).select("_id")).map((c) => c._id);
   await CallApplication.deleteMany({ $or: [{ applicant: id }, { call: { $in: callIds } }] });

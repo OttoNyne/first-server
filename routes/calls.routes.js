@@ -8,6 +8,8 @@ import { User } from "../models/User.js";
 import { Friendship } from "../models/Friendship.js";
 import { requireAuth } from "../middleware/auth.js";
 import { deleteApplication, deleteCall } from "../services/removal.js";
+import { ensureProject, roomIsFull } from "../services/projects.js";
+import { Project } from "../models/Project.js";
 import { verifiedEmailRequired, userHasVerifiedEmail } from "../middleware/requireVerifiedEmail.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { cleanBody } from "../utils/blogText.js";
@@ -149,12 +151,16 @@ callsRouter.get("/:id", async (req, res) => {
   const mine = String(call.owner._id) === req.user.id;
   const me = await User.findById(req.user.id).select("workOffers tags");
   const application = mine ? null : await CallApplication.findOne({ call: call._id, applicant: req.user.id });
+  // the room for this call, for the person who asked and for anyone they chose
+  const room = await Project.findOne({ call: call._id }).select("members");
+  const inRoom = room && room.members.some((m) => String(m) === req.user.id);
   const counts = mine ? { applicantCount: await CallApplication.countDocuments({ call: call._id }), waitingCount: await CallApplication.countDocuments({ call: call._id, status: "waiting" }) } : {};
   res.json({
     call: toPublicCall(call, call.owner, req.user.id, {
       match: mine ? [] : matchedRoles(call.lookingFor, me),
       applied: application?.status ?? null,
       myApplication: application ? { id: application._id, note: application.note, status: application.status, reply: application.reply, pieceId: application.piece ?? null } : null,
+      projectId: inRoom ? room._id : null,
       ...counts,
     }),
   });
@@ -264,14 +270,17 @@ callsRouter.post("/:id/applications/:appId/answer", async (req, res) => {
   const rawReply = req.body.reply;
   const reply = rawReply === undefined || rawReply === null ? "" : typeof rawReply === "string" ? cleanBody(rawReply) : null;
   if (reply === null || [...reply].length > MAX_REPLY) return bad(res, `Replies can be up to ${MAX_REPLY} characters`);
+  if (req.body.choose && (await roomIsFull(call, application.applicant))) return bad(res, "This project room is full", 409);
   if (!(await answerLimit.allow(req.user.id))) return bad(res, "You're replying too fast — try again in a few minutes.", 429);
   application.status = req.body.choose ? "chosen" : "passed";
   application.reply = reply;
   application.answeredAt = new Date();
   await application.save();
   await Notification.deleteMany({ type: "call_application", "payload.callId": String(call._id), "payload.actorId": String(application.applicant) });
-  await Notification.create({ recipient: application.applicant, type: "call_answer", payload: { actorId: String(req.user.id), callId: String(call._id), title: call.title, chosen: req.body.choose } });
-  res.json({ application: { id: application._id, status: application.status, reply: application.reply, answeredAt: application.answeredAt } });
+  // choosing someone opens (or adds them to) the project room for the call
+  const room = req.body.choose ? (await ensureProject(call, application.applicant)).project : null;
+  await Notification.create({ recipient: application.applicant, type: "call_answer", payload: { actorId: String(req.user.id), callId: String(call._id), title: call.title, chosen: req.body.choose, ...(room ? { projectId: String(room._id) } : {}) } });
+  res.json({ application: { id: application._id, status: application.status, reply: application.reply, answeredAt: application.answeredAt, projectId: room?._id ?? null } });
 });
 
 // People who might fit (the owner only): open to work, with something in common with what the call looks for, best fit first.

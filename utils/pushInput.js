@@ -2,7 +2,7 @@
 
 /** The switches a person has, and the notification types each one covers. */
 export const PUSH_CATEGORIES = {
-  messages: ["message"],
+  messages: ["message", "project_message"],
   friends: ["friend_request", "friend_accept", "invite_joined", "group_invite", "friend_birthday", "credit_request", "credit_accepted", "work_request", "work_reply", "follow", "repost", "call_application", "call_answer"],
   comments: ["comment", "profile_comment", "media_comment", "blog_comment", "reaction", "mention", "reply"],
   events: ["event_created", "event_updated", "event_cancelled", "event_reminder", "live_scheduled", "live_reminder"],

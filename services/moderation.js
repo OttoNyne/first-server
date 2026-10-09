@@ -4,6 +4,7 @@ import { MediaItem } from "../models/MediaItem.js";
 import { ProcessStep } from "../models/ProcessStep.js";
 import { Call } from "../models/Call.js";
 import { CallApplication } from "../models/CallApplication.js";
+import { ProjectMessage } from "../models/ProjectMessage.js";
 import { deleteApplication, deleteCall, deletePiece, deletePost, deleteStep } from "./removal.js";
 import { Comment } from "../models/Comment.js";
 import { ProfileComment } from "../models/ProfileComment.js";
@@ -25,7 +26,7 @@ import { releasePictures } from "./commentPictures.js";
 import { isAdminUser } from "../utils/admin.js";
 import { ABOUT_FIELDS } from "../utils/about.js";
 
-export const CONTENT_TYPES = ["post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment", "event", "blogComment", "piece", "processStep", "call", "callApplication"];
+export const CONTENT_TYPES = ["post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment", "event", "blogComment", "piece", "processStep", "call", "callApplication", "projectMessage"];
 export const REPORT_TYPES = ["user", ...CONTENT_TYPES];
 const PREVIEW_CHARS = 600;
 const clip = (text) => (typeof text === "string" && text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS)}…` : (text ?? ""));
@@ -84,6 +85,10 @@ export async function loadTarget(type, id, viewerId) {
     case "callApplication": {
       const a = await CallApplication.findById(id).populate("applicant");
       return a ? shape(a.applicant, { text: clip(a.note), link: `/calls/${a.call}` }) : { exists: false, authorId: null };
+    }
+    case "projectMessage": {
+      const m = await ProjectMessage.findById(id).populate("author");
+      return m ? shape(m.author, { text: clip(m.content), image: m.imageUrl ?? null, link: `/projects/${m.project}` }) : { exists: false, authorId: null };
     }
     case "blogComment": {
       const c = await BlogComment.findById(id).populate("author");
@@ -169,6 +174,11 @@ export async function removeContent(type, id) {
       await deleteApplication(application);
       return true;
     }
+    case "projectMessage": {
+      const message = await ProjectMessage.findByIdAndDelete(id);
+      if (message) await releasePictures([message]);
+      return message !== null;
+    }
     case "bulletin":
       return (await Bulletin.findByIdAndDelete(id)) !== null;
     case "groupTopic": {
@@ -185,7 +195,7 @@ export async function removeContent(type, id) {
   return false;
 }
 
-const WHAT = { post: "post", comment: "comment", profileComment: "testimonial", mediaComment: "comment on a portfolio piece", blogComment: "comment on a blog entry", event: "event", blogEntry: "blog entry", bulletin: "bulletin", groupTopic: "group topic", groupReply: "group reply", piece: "portfolio piece", processStep: "step of a portfolio piece", call: "open call", callApplication: "answer to an open call" };
+const WHAT = { post: "post", comment: "comment", profileComment: "testimonial", mediaComment: "comment on a portfolio piece", blogComment: "comment on a blog entry", event: "event", blogEntry: "blog entry", bulletin: "bulletin", groupTopic: "group topic", groupReply: "group reply", piece: "portfolio piece", processStep: "step of a portfolio piece", call: "open call", callApplication: "answer to an open call", projectMessage: "message in a project room" };
 
 export async function suspendUser(userId, note) {
   await User.updateOne({ _id: userId }, { $set: { suspendedAt: new Date(), suspensionNote: note ?? "" } });

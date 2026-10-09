@@ -10,6 +10,8 @@ import mongoose from "mongoose";
 import { createLimiter } from "../utils/rateLimit.js";
 import { cleanLine } from "../utils/profileFields.js";
 import { loadTarget } from "../services/moderation.js";
+import { Project } from "../models/Project.js";
+import { ProjectMessage } from "../models/ProjectMessage.js";
 
 export const moderationRouter = Router();
 moderationRouter.use(requireAuth);
@@ -49,7 +51,7 @@ moderationRouter.delete("/users/:username/block", async (req, res) => {
   res.status(204).end();
 });
 
-const REPORT_TARGET_TYPES = ["user", "post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment", "event", "blogComment", "piece", "processStep", "call", "callApplication"];
+const REPORT_TARGET_TYPES = ["user", "post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment", "event", "blogComment", "piece", "processStep", "call", "callApplication", "projectMessage"];
 
 const reportLimiter = createLimiter({ name: "report", limit: 30, windowMs: 60 * 60 * 1000 });
 
@@ -65,6 +67,12 @@ moderationRouter.post("/reports", async (req, res) => {
   if (reason.length > 500) return res.status(400).json({ error: "Reasons can be up to 500 characters" });
   if (!mongoose.isValidObjectId(targetId)) return res.status(400).json({ error: "targetId isn't valid" });
   if (targetType === "user" && String(targetId) === req.user.id) return res.status(400).json({ error: "You can't report yourself" });
+  // a message in a private room can only be reported by someone in that room, and anyone else gets the answer for a missing one
+  if (targetType === "projectMessage") {
+    const message = await ProjectMessage.findById(targetId).select("project");
+    const room = message ? await Project.findOne({ _id: message.project, members: req.user.id }).select("_id") : null;
+    if (!room) return res.status(404).json({ error: "That doesn't exist any more" });
+  }
   // Only things that exist can be reported, so the queue doesn't fill with references to nothing.
   if (!(await loadTarget(targetType, targetId, req.user.id)).exists) return res.status(404).json({ error: "That doesn't exist any more" });
 
