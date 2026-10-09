@@ -46,6 +46,8 @@ const TEXT = {
   follow: { en: ({ who }) => `${who} started following you`, es: ({ who }) => `${who} empezó a seguirte`, ar: ({ who }) => `${who} بدأ بمتابعتك` },
   repost: { en: ({ who }) => `${who} shared your post`, es: ({ who }) => `${who} compartió tu publicación`, ar: ({ who }) => `${who} شارك منشورك` },
   reply: { en: ({ who }) => `${who} replied to your comment`, es: ({ who }) => `${who} respondió a tu comentario`, ar: ({ who }) => `${who} ردّ على تعليقك` },
+  critique_note: { en: ({ who }) => `${who} gave you feedback on a piece`, es: ({ who }) => `${who} te dio su opinión sobre una obra`, ar: ({ who }) => `${who} قدّم لك ملاحظات على أحد أعمالك` },
+  critique_thanks: { en: ({ who }) => `${who} thanked you for your feedback`, es: ({ who }) => `${who} te agradeció tu opinión`, ar: ({ who }) => `${who} شكرك على ملاحظاتك` },
   project_message: { en: ({ who }) => `${who} wrote in your project room`, es: ({ who }) => `${who} escribió en tu sala de proyecto`, ar: ({ who }) => `${who} كتب في غرفة مشروعك` },
   call_match: { en: ({ who }) => `${who} posted an open call that fits what you offer`, es: ({ who }) => `${who} publicó una convocatoria que encaja con lo que ofreces`, ar: ({ who }) => `${who} نشر دعوة مفتوحة تناسب ما تقدمه` },
   call_application: { en: ({ who }) => `${who} applied to your open call`, es: ({ who }) => `${who} respondió a tu convocatoria`, ar: ({ who }) => `${who} تقدّم إلى دعوتك المفتوحة` },

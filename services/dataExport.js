@@ -36,6 +36,8 @@ import { TagFollow } from "../models/TagFollow.js";
 import { Project } from "../models/Project.js";
 import { ProjectMessage } from "../models/ProjectMessage.js";
 import { ProcessStep } from "../models/ProcessStep.js";
+import { Critique } from "../models/Critique.js";
+import { CritiqueNote } from "../models/CritiqueNote.js";
 import { Call } from "../models/Call.js";
 import { CallApplication } from "../models/CallApplication.js";
 import { ChallengeEntry } from "../models/ChallengeEntry.js";
@@ -99,6 +101,9 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
   const challengeEntries = await rows("challengeEntries", ChallengeEntry.find({ user: id }));
   const followRows = await rows("following", Follow.find({ follower: id }));
   const stepRows = await rows("processSteps", ProcessStep.find({ owner: id }));
+  const askedRows = await rows("critiqueRequests", Critique.find({ owner: id }));
+  const askedNotes = await CritiqueNote.find({ critique: { $in: askedRows.map((c) => c._id) } }).lean();
+  const givenRows = await rows("critiqueNotes", CritiqueNote.find({ author: id }));
   const callRows = await rows("calls", Call.find({ owner: id }));
   const applicationRows = await rows("callApplications", CallApplication.find({ applicant: id }));
   const appliedTo = new Map((await Call.find({ _id: { $in: applicationRows.map((a) => a.call) } }).select("title").lean()).map((c) => [String(c._id), c.title]));
@@ -201,6 +206,8 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
     callApplications: applicationRows.map((a) => ({ call: String(a.call), callTitle: appliedTo.get(String(a.call)) ?? null, note: text(a.note), piece: a.piece ? String(a.piece) : null, status: a.status, reply: text(a.reply), applied: iso(a.createdAt) })),
     projects: roomRows.map((p) => ({ id: String(p._id), title: text(p.title), role: String(p.owner) === String(id) ? "owner" : "member", status: p.status, started: iso(p.createdAt) })),
     projectMessages: roomMessageRows.map((m) => ({ project: String(m.project), text: text(m.content), pictureUrl: m.imageUrl ?? null, written: iso(m.createdAt) })),
+    critiqueRequests: askedRows.map((c) => ({ id: String(c._id), piece: String(c.piece), question: text(c.question), status: c.status, asked: iso(c.createdAt), notesReceived: askedNotes.filter((n) => String(n.critique) === String(c._id)).length })),
+    critiqueNotes: givenRows.map((n) => ({ request: String(n.critique), working: text(n.working), change: text(n.change), written: iso(n.createdAt), edited: iso(n.editedAt) })),
     processSteps: stepRows.map((s) => ({ piece: String(s.piece), position: s.position, text: text(s.content), pictureUrl: s.imageUrl ?? null, added: iso(s.createdAt), edited: iso(s.editedAt) })),
     followedTopics: topicRows.map((r) => r.tag),
     weeklySummary: user.weeklyDigest === true,

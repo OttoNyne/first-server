@@ -5,7 +5,6 @@ import { CallApplication } from "../models/CallApplication.js";
 import { MediaItem } from "../models/MediaItem.js";
 import { Notification } from "../models/Notification.js";
 import { User } from "../models/User.js";
-import { Friendship } from "../models/Friendship.js";
 import { requireAuth } from "../middleware/auth.js";
 import { deleteApplication, deleteCall } from "../services/removal.js";
 import { ensureProject, roomIsFull } from "../services/projects.js";
@@ -14,7 +13,7 @@ import { verifiedEmailRequired, userHasVerifiedEmail } from "../middleware/requi
 import { createLimiter } from "../utils/rateLimit.js";
 import { cleanBody } from "../utils/blogText.js";
 import { cursorFilter } from "../utils/textInput.js";
-import { blockedUserIds } from "../utils/visibility.js";
+import { blockedUserIds, visibleToViewer } from "../utils/visibility.js";
 import { mutedUserIds } from "../utils/mutes.js";
 import { MAX_APPLICATIONS, MAX_NOTE, MAX_OPEN_CALLS, MAX_REPLY, findMatches, isClosed, matchedRoles, peopleToTell, readCall, startOfToday } from "../utils/calls.js";
 
@@ -55,12 +54,7 @@ function toPublicCall(call, owner, viewer, extra = {}) {
   };
 }
 
-/** Who a viewer may see: not suspended, not blocked either way, and not private unless a friend. */
-async function viewerLimits(viewerId) {
-  const [blocked, friendships] = await Promise.all([blockedUserIds(viewerId), Friendship.find({ status: "accepted", $or: [{ requester: viewerId }, { addressee: viewerId }] })]);
-  const friends = new Set(friendships.map((f) => (String(f.requester) === String(viewerId) ? String(f.addressee) : String(f.requester))));
-  return (owner) => Boolean(owner) && !owner.suspendedAt && !blocked.has(String(owner._id)) && (!owner.isPrivate || friends.has(String(owner._id)) || String(owner._id) === String(viewerId));
-}
+const viewerLimits = visibleToViewer;
 
 /** A call and its owner, if the viewer may see it; otherwise null. */
 async function loadVisible(id, viewerId) {

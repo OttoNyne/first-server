@@ -6,6 +6,8 @@ import { MediaComment } from "../models/MediaComment.js";
 import { Album } from "../models/Album.js";
 import { User } from "../models/User.js";
 import { ProcessStep } from "../models/ProcessStep.js";
+import { Critique } from "../models/Critique.js";
+import { CritiqueNote } from "../models/CritiqueNote.js";
 import { deletePiece } from "../services/removal.js";
 import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { upload } from "../middleware/upload.js";
@@ -164,8 +166,12 @@ mediaRouter.get("/user/:username", attachUserIfPresent, async (req, res) => {
     const credits = await creditsForItems(ids, req.user?.id);
     const saved = await savedIdsOf("piece", ids, req.user?.id);
     const processCounts = new Map((await ProcessStep.aggregate([{ $match: { piece: { $in: ids } } }, { $group: { _id: "$piece", n: { $sum: 1 } } }])).map((c) => [String(c._id), c.n]));
+    // an open request for feedback on a piece, with how many have answered it
+    const askedFor = await Critique.find({ piece: { $in: ids }, status: "open" }).select("piece").lean();
+    const noteCounts = new Map((await CritiqueNote.aggregate([{ $match: { critique: { $in: askedFor.map((c) => c._id) } } }, { $group: { _id: "$critique", n: { $sum: 1 } } }])).map((c) => [String(c._id), c.n]));
+    const requestOf = new Map(askedFor.map((c) => [String(c.piece), { id: c._id, noteCount: noteCounts.get(String(c._id)) ?? 0 }]));
     res.json({
-      media: items.map((item) => ({ ...toPublicMediaItem(item, { reactions: summary.get(String(item._id)), commentCount: counts.get(String(item._id)) ?? 0 }), credits: credits.get(String(item._id)) ?? [], saved: saved.has(String(item._id)), featured: String(item._id) === featuredId, processCount: processCounts.get(String(item._id)) ?? 0 })),
+      media: items.map((item) => ({ ...toPublicMediaItem(item, { reactions: summary.get(String(item._id)), commentCount: counts.get(String(item._id)) ?? 0 }), critique: requestOf.get(String(item._id)) ?? null, credits: credits.get(String(item._id)) ?? [], saved: saved.has(String(item._id)), featured: String(item._id) === featuredId, processCount: processCounts.get(String(item._id)) ?? 0 })),
     });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });

@@ -8,6 +8,8 @@ import { ChallengeEntry } from "../models/ChallengeEntry.js";
 import { Notification } from "../models/Notification.js";
 import { User } from "../models/User.js";
 import { CallApplication } from "../models/CallApplication.js";
+import { Critique } from "../models/Critique.js";
+import { CritiqueNote } from "../models/CritiqueNote.js";
 import { forgetReactions } from "../utils/reactions.js";
 import { releasePictures } from "./commentPictures.js";
 import { deleteStoredAssetIfUnused } from "./storedAssets.js";
@@ -30,8 +32,16 @@ export async function deletePost(post) {
   if (post.imageUrl) await deleteStoredAssetIfUnused({ ownerId: post.author, url: post.imageUrl });
 }
 
+/** A request for feedback with its notes and the notices about it. */
+export async function deleteCritique(critique) {
+  await critique.deleteOne();
+  await CritiqueNote.deleteMany({ critique: critique._id });
+  await Notification.deleteMany({ type: { $in: ["critique_note", "critique_thanks"] }, "payload.critiqueId": String(critique._id) });
+}
+
 /** A portfolio piece, its steps, comments, credits, entries and saves. */
 export async function deletePiece(item) {
+  for (const request of await Critique.find({ piece: item._id })) await deleteCritique(request);
   await item.deleteOne();
   await forgetReactions("media", [item._id]);
   await Credit.deleteMany({ item: item._id });

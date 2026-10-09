@@ -27,6 +27,9 @@ import { Project } from "../models/Project.js";
 import { ProjectMessage } from "../models/ProjectMessage.js";
 import { deleteProject, removeMember } from "./projects.js";
 import { ProcessStep } from "../models/ProcessStep.js";
+import { Critique } from "../models/Critique.js";
+import { CritiqueNote } from "../models/CritiqueNote.js";
+import { deleteCritique } from "./removal.js";
 import { Call } from "../models/Call.js";
 import { CallApplication } from "../models/CallApplication.js";
 import { ChallengeEntry } from "../models/ChallengeEntry.js";
@@ -128,6 +131,11 @@ export async function deleteAccount(userId) {
   const roomMessages = await ProjectMessage.find({ author: id });
   await ProjectMessage.deleteMany({ author: id });
   await releasePictures(roomMessages);
+  // feedback: the requests they asked (with every note on them) and the notes they wrote on other people's
+  for (const request of await Critique.find({ owner: id })) await deleteCritique(request);
+  const notesWritten = await CritiqueNote.find({ author: id }).select("critique");
+  await CritiqueNote.deleteMany({ author: id });
+  await Notification.deleteMany({ type: "critique_note", "payload.critiqueId": { $in: notesWritten.map((n) => String(n.critique)) }, "payload.actorId": String(id) });
   await ProcessStep.deleteMany({ owner: id });
   const callIds = (await Call.find({ owner: id }).select("_id")).map((c) => c._id);
   await CallApplication.deleteMany({ $or: [{ applicant: id }, { call: { $in: callIds } }] });

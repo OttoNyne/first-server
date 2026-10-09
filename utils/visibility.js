@@ -12,6 +12,13 @@ export async function areBlocked(idA, idB) {
   return !!block;
 }
 
+/** A test for "may this viewer see this person's things": not suspended, not blocked either way, and not private unless a friend (or themselves). */
+export async function visibleToViewer(viewerId) {
+  const [blocked, friendships] = await Promise.all([blockedUserIds(viewerId), Friendship.find({ status: "accepted", $or: [{ requester: viewerId }, { addressee: viewerId }] })]);
+  const friends = new Set(friendships.map((f) => (String(f.requester) === String(viewerId) ? String(f.addressee) : String(f.requester))));
+  return (owner) => Boolean(owner) && !owner.suspendedAt && !blocked.has(String(owner._id)) && (!owner.isPrivate || friends.has(String(owner._id)) || String(owner._id) === String(viewerId));
+}
+
 // Ids of everyone the viewer has blocked or been blocked by (either direction hides them).
 export async function blockedUserIds(viewerId) {
   const blocks = await Block.find({ $or: [{ blocker: viewerId }, { blocked: viewerId }] });
