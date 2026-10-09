@@ -7,6 +7,7 @@ import { Notification } from "../models/Notification.js";
 import { User } from "../models/User.js";
 import { Friendship } from "../models/Friendship.js";
 import { requireAuth } from "../middleware/auth.js";
+import { deleteApplication, deleteCall } from "../services/removal.js";
 import { verifiedEmailRequired, userHasVerifiedEmail } from "../middleware/requireVerifiedEmail.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { cleanBody } from "../utils/blogText.js";
@@ -187,9 +188,7 @@ callsRouter.patch("/:id", async (req, res) => {
 callsRouter.delete("/:id", async (req, res) => {
   const call = validId(req.params.id) ? await Call.findOne({ _id: req.params.id, owner: req.user.id }) : null;
   if (!call) return notFound(res);
-  await call.deleteOne();
-  await CallApplication.deleteMany({ call: call._id });
-  await Notification.deleteMany({ type: { $in: ["call_match", "call_application", "call_answer"] }, "payload.callId": String(call._id) });
+  await deleteCall(call);
   res.status(204).end();
 });
 
@@ -227,8 +226,7 @@ callsRouter.delete("/:id/apply", async (req, res) => {
   const application = validId(req.params.id) ? await CallApplication.findOne({ call: req.params.id, applicant: req.user.id }) : null;
   if (!application) return bad(res, "Application not found", 404);
   if (application.status !== "waiting") return bad(res, "That has been answered, so it can't be withdrawn", 409);
-  await application.deleteOne();
-  await Notification.deleteMany({ type: "call_application", "payload.callId": String(application.call), "payload.actorId": String(req.user.id) });
+  await deleteApplication(application);
   res.status(204).end();
 });
 

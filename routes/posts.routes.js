@@ -9,6 +9,7 @@ import { Save } from "../models/Save.js";
 import { Notification } from "../models/Notification.js";
 import { savedIdsOf } from "../utils/saves.js";
 import { PollVote } from "../models/PollVote.js";
+import { deletePost } from "../services/removal.js";
 import { mutedUserIds, postHidden, wordMatcher } from "../utils/mutes.js";
 import { hasPoll, isClosed, pollTallies, publicPoll, readPoll } from "../utils/polls.js";
 import { areBlocked } from "../utils/visibility.js";
@@ -306,17 +307,6 @@ postsRouter.delete("/:id", async (req, res) => {
   const post = await Post.findById(req.params.id);
   if (!post) return res.status(404).json({ error: "Post not found" });
   if (String(post.author) !== req.user.id) return res.status(403).json({ error: "Not allowed" });
-  const withPictures = await Comment.find({ post: post._id, imageUrl: { $ne: null } });
-  await Comment.deleteMany({ post: post._id });
-  await releasePictures(withPictures);
-  await post.deleteOne();
-  await forgetReactions("post", [post._id]);
-  await Save.deleteMany({ targetType: "post", target: post._id });
-  await PollVote.deleteMany({ post: post._id });
-  await User.updateOne({ _id: post.author, pinnedPost: post._id }, { $set: { pinnedPost: null } });
-  await Notification.deleteMany({ type: "repost", "payload.postId": String(post._id) });
-  // An AI-generated image that only this post used would otherwise sit on
-  // Cloudinary forever.
-  if (post.imageUrl) await deleteStoredAssetIfUnused({ ownerId: post.author, url: post.imageUrl });
+  await deletePost(post);
   res.status(204).end();
 });

@@ -8,6 +8,7 @@ import { assertVisible } from "../utils/visibility.js";
 import { checkComment } from "../utils/commentInput.js";
 import { allowEdit } from "../utils/textInput.js";
 import { releasePictures } from "../services/commentPictures.js";
+import { deleteStep } from "../services/removal.js";
 import { createLimiter } from "../utils/rateLimit.js";
 
 // Process: how a portfolio piece was made, as a short list of steps (words and/or a picture each) that its owner adds, changes, puts in
@@ -91,7 +92,6 @@ processRouter.patch("/process/:stepId", requireAuth, async (req, res) => {
 processRouter.delete("/process/:stepId", requireAuth, async (req, res) => {
   const step = mongoose.isValidObjectId(req.params.stepId) ? await ProcessStep.findById(req.params.stepId) : null;
   if (!step || String(step.owner) !== req.user.id) return missingStep(res);
-  await step.deleteOne();
-  await releasePictures([{ author: step.owner, imageUrl: step.imageUrl }]);
+  await deleteStep(step);
   res.status(204).end();
 });

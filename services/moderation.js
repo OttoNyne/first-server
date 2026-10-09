@@ -1,6 +1,10 @@
 import mongoose from "mongoose";
-import { forgetReactions } from "../utils/reactions.js";
 import { Post } from "../models/Post.js";
+import { MediaItem } from "../models/MediaItem.js";
+import { ProcessStep } from "../models/ProcessStep.js";
+import { Call } from "../models/Call.js";
+import { CallApplication } from "../models/CallApplication.js";
+import { deleteApplication, deleteCall, deletePiece, deletePost, deleteStep } from "./removal.js";
 import { Comment } from "../models/Comment.js";
 import { ProfileComment } from "../models/ProfileComment.js";
 import { MediaComment } from "../models/MediaComment.js";
@@ -17,12 +21,11 @@ import { Report } from "../models/Report.js";
 import { ModerationAction } from "../models/ModerationAction.js";
 import { User } from "../models/User.js";
 import { toPublicUser } from "../utils/serialize.js";
-import { deleteStoredAssetIfUnused } from "./storedAssets.js";
 import { releasePictures } from "./commentPictures.js";
 import { isAdminUser } from "../utils/admin.js";
 import { ABOUT_FIELDS } from "../utils/about.js";
 
-export const CONTENT_TYPES = ["post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment", "event", "blogComment"];
+export const CONTENT_TYPES = ["post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment", "event", "blogComment", "piece", "processStep", "call", "callApplication"];
 export const REPORT_TYPES = ["user", ...CONTENT_TYPES];
 const PREVIEW_CHARS = 600;
 const clip = (text) => (typeof text === "string" && text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS)}…` : (text ?? ""));
@@ -44,8 +47,10 @@ export async function loadTarget(type, id, viewerId) {
       return u ? shape(u, { text: clip([u.bio, ...ABOUT_FIELDS.map((field) => u.about?.[field]), u.location].filter(Boolean).join("\n")), title: u.displayName, link: `/u/${u.username}` }) : { exists: false, authorId: null };
     }
     case "post": {
-      const p = await Post.findById(id).populate("author");
-      return p ? shape(p.author, { text: clip(p.content), image: p.imageUrl ?? null, link: `/posts/${p._id}`, edited: Boolean(p.editedAt) }) : { exists: false, authorId: null };
+      const p = await Post.findById(id).populate("author").populate("repostOf");
+      // a poll's options and the words of a post it shares are part of what the reporter saw
+      const parts = [p?.content, p?.poll?.options?.length ? `Poll: ${p.poll.options.join(" / ")}` : "", p?.isRepost && p.repostOf ? `Shares: ${p.repostOf.content}` : ""].filter(Boolean);
+      return p ? shape(p.author, { text: clip(parts.join("\n")), image: p.imageUrl ?? null, link: `/posts/${p._id}`, edited: Boolean(p.editedAt) }) : { exists: false, authorId: null };
     }
     case "comment": {
       const c = await Comment.findById(id).populate("author");
@@ -63,6 +68,22 @@ export async function loadTarget(type, id, viewerId) {
       const c = await MediaComment.findById(id).populate("author").populate({ path: "item", populate: { path: "owner" } });
       const owner = c?.item?.owner;
       return c ? shape(c.author, { text: clip(c.content), image: c.imageUrl ?? null, link: owner ? `/u/${owner.username}?piece=${c.item._id}&comment=${c._id}#portfolio` : null, edited: Boolean(c.editedAt) }) : { exists: false, authorId: null };
+    }
+    case "piece": {
+      const m = await MediaItem.findById(id).populate("owner");
+      return m ? shape(m.owner, { title: m.type === "image" ? undefined : m.type, text: clip(m.caption), image: m.type === "image" ? m.url : null, link: m.owner ? `/u/${m.owner.username}?piece=${m._id}#portfolio` : null }) : { exists: false, authorId: null };
+    }
+    case "processStep": {
+      const s = await ProcessStep.findById(id).populate("owner").populate({ path: "piece", populate: { path: "owner" } });
+      return s ? shape(s.owner, { text: clip(s.content), image: s.imageUrl ?? null, link: s.piece?.owner ? `/u/${s.piece.owner.username}?piece=${s.piece._id}#portfolio` : null, edited: Boolean(s.editedAt) }) : { exists: false, authorId: null };
+    }
+    case "call": {
+      const c = await Call.findById(id).populate("owner");
+      return c ? shape(c.owner, { title: c.title, text: clip([c.details, c.lookingFor?.join(", "), c.budget].filter(Boolean).join("\n")), link: `/calls/${c._id}` }) : { exists: false, authorId: null };
+    }
+    case "callApplication": {
+      const a = await CallApplication.findById(id).populate("applicant");
+      return a ? shape(a.applicant, { text: clip(a.note), link: `/calls/${a.call}` }) : { exists: false, authorId: null };
     }
     case "blogComment": {
       const c = await BlogComment.findById(id).populate("author");
@@ -94,12 +115,7 @@ export async function removeContent(type, id) {
     case "post": {
       const post = await Post.findById(id);
       if (!post) return false;
-      const withPictures = await Comment.find({ post: post._id, imageUrl: { $ne: null } });
-      await Comment.deleteMany({ post: post._id });
-      await releasePictures(withPictures);
-      await post.deleteOne();
-      await forgetReactions("post", [post._id]);
-      if (post.imageUrl) await deleteStoredAssetIfUnused({ ownerId: post.author, url: post.imageUrl });
+      await deletePost(post);
       return true;
     }
     case "comment":
@@ -129,6 +145,30 @@ export async function removeContent(type, id) {
       }
       return entry !== null;
     }
+    case "piece": {
+      const item = await MediaItem.findById(id);
+      if (!item) return false;
+      await deletePiece(item);
+      return true;
+    }
+    case "processStep": {
+      const step = await ProcessStep.findById(id);
+      if (!step) return false;
+      await deleteStep(step);
+      return true;
+    }
+    case "call": {
+      const call = await Call.findById(id);
+      if (!call) return false;
+      await deleteCall(call);
+      return true;
+    }
+    case "callApplication": {
+      const application = await CallApplication.findById(id);
+      if (!application) return false;
+      await deleteApplication(application);
+      return true;
+    }
     case "bulletin":
       return (await Bulletin.findByIdAndDelete(id)) !== null;
     case "groupTopic": {
@@ -145,7 +185,7 @@ export async function removeContent(type, id) {
   return false;
 }
 
-const WHAT = { post: "post", comment: "comment", profileComment: "testimonial", mediaComment: "comment on a portfolio piece", blogComment: "comment on a blog entry", event: "event", blogEntry: "blog entry", bulletin: "bulletin", groupTopic: "group topic", groupReply: "group reply" };
+const WHAT = { post: "post", comment: "comment", profileComment: "testimonial", mediaComment: "comment on a portfolio piece", blogComment: "comment on a blog entry", event: "event", blogEntry: "blog entry", bulletin: "bulletin", groupTopic: "group topic", groupReply: "group reply", piece: "portfolio piece", processStep: "step of a portfolio piece", call: "open call", callApplication: "answer to an open call" };
 
 export async function suspendUser(userId, note) {
   await User.updateOne({ _id: userId }, { $set: { suspendedAt: new Date(), suspensionNote: note ?? "" } });
