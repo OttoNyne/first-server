@@ -57,6 +57,7 @@ export async function toPublicComment(comment, viewerId) {
     imageUrl: comment.imageUrl ?? null,
     createdAt: comment.createdAt,
     editedAt: comment.editedAt ?? null,
+    parent: comment.parent ?? null,
     author: await toPublicUser(comment.author, viewerId),
   };
 }

@@ -7,6 +7,7 @@ import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { toPublicComment } from "../utils/serialize.js";
 import { assertVisible } from "../utils/visibility.js";
 import { canSeeProfileOf, notifyMentions } from "../services/mentions.js";
+import { notifyReply, removeReplies, resolveParent } from "../utils/commentReplies.js";
 import mongoose from "mongoose";
 import { MAX_COMMENT, allowEdit, cursorFilter } from "../utils/textInput.js";
 import { checkComment } from "../utils/commentInput.js";
@@ -52,8 +53,11 @@ commentsRouter.post("/posts/:postId/comments", requireAuth, async (req, res) => 
     res.set("Retry-After", String(commentLimiter.windowSeconds));
     return res.status(429).json({ error: "You're commenting too fast — try again in a few minutes." });
   }
+  const parent = await resolveParent(Comment, req.body?.parent, { post: post._id });
+  if (parent.error) return res.status(400).json({ error: parent.error });
   let comment = await Comment.create({
     post: post._id,
+    parent: parent.value,
     author: req.user.id,
     content: text.value.content,
     imageUrl: text.value.imageUrl ?? null,
@@ -69,6 +73,7 @@ commentsRouter.post("/posts/:postId/comments", requireAuth, async (req, res) => 
   }
 
   await notifyMentions({ text: comment.content, actorId: req.user.id, url: `/posts/${post._id}?comment=${comment._id}`, canSee: canSeeProfileOf(await User.findById(post.author)), skip: [post.author] });
+  await notifyReply({ replyTo: parent.replyTo, actorId: req.user.id, url: `/posts/${post._id}?comment=${comment._id}`, skip: [post.author] });
   res.status(201).json({ comment: await toPublicComment(comment, req.user.id) });
 });
 
@@ -107,5 +112,6 @@ commentsRouter.delete("/comments/:id", requireAuth, async (req, res) => {
   if (!isAuthor && !isPostAuthor) return res.status(403).json({ error: "Not allowed" });
   await comment.deleteOne();
   await releasePictures([comment]);
+  await removeReplies(Comment, comment);
   res.status(204).end();
 });

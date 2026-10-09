@@ -45,6 +45,7 @@ const TEXT = {
   mention: { en: ({ who }) => `${who} mentioned you`, es: ({ who }) => `${who} te mencionó`, ar: ({ who }) => `${who} أشار إليك` },
   follow: { en: ({ who }) => `${who} started following you`, es: ({ who }) => `${who} empezó a seguirte`, ar: ({ who }) => `${who} بدأ بمتابعتك` },
   repost: { en: ({ who }) => `${who} shared your post`, es: ({ who }) => `${who} compartió tu publicación`, ar: ({ who }) => `${who} شارك منشورك` },
+  reply: { en: ({ who }) => `${who} replied to your comment`, es: ({ who }) => `${who} respondió a tu comentario`, ar: ({ who }) => `${who} ردّ على تعليقك` },
   work_reply: { en: ({ who }) => `${who} answered your request for work`, es: ({ who }) => `${who} respondió a tu solicitud de trabajo`, ar: ({ who }) => `${who} ردّ على طلب العمل الذي أرسلته` },
   cs_verified: { en: () => "You're now CSverified", es: () => "Ya estás verificado en CS", ar: () => "أصبحت الآن موثّقًا في CS" },
   test: { en: () => "Notifications are working on this device", es: () => "Las notificaciones funcionan en este dispositivo", ar: () => "الإشعارات تعمل على هذا الجهاز" },

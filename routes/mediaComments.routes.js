@@ -8,6 +8,7 @@ import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { toPublicComment } from "../utils/serialize.js";
 import { assertVisible, blockedUserIds } from "../utils/visibility.js";
 import { canSeeProfileOf, notifyMentions } from "../services/mentions.js";
+import { notifyReply, removeReplies, resolveParent } from "../utils/commentReplies.js";
 import { MAX_COMMENT, allowEdit, cursorFilter } from "../utils/textInput.js";
 import { checkComment } from "../utils/commentInput.js";
 import { releasePictures } from "../services/commentPictures.js";
@@ -60,7 +61,9 @@ mediaCommentsRouter.post("/:id/comments", requireAuth, async (req, res) => {
     return res.status(429).json({ error: "You're commenting too fast — try again in a few minutes." });
   }
 
-  let comment = await MediaComment.create({ item: piece.item._id, author: req.user.id, content: text.value.content, imageUrl: text.value.imageUrl ?? null });
+  const parent = await resolveParent(MediaComment, req.body?.parent, { item: piece.item._id });
+  if (parent.error) return res.status(400).json({ error: parent.error });
+  let comment = await MediaComment.create({ item: piece.item._id, parent: parent.value, author: req.user.id, content: text.value.content, imageUrl: text.value.imageUrl ?? null });
   comment = await comment.populate("author");
 
   if (String(piece.owner._id) !== req.user.id) {
@@ -71,6 +74,7 @@ mediaCommentsRouter.post("/:id/comments", requireAuth, async (req, res) => {
     });
   }
   await notifyMentions({ text: comment.content, actorId: req.user.id, url: `/u/${piece.owner.username}?piece=${piece.item._id}&comment=${comment._id}#portfolio`, canSee: canSeeProfileOf(piece.owner), skip: [piece.owner._id] });
+  await notifyReply({ replyTo: parent.replyTo, actorId: req.user.id, url: `/u/${piece.owner.username}?piece=${piece.item._id}&comment=${comment._id}#portfolio`, skip: [piece.owner._id] });
   res.status(201).json({ comment: await toPublicComment(comment, req.user.id) });
 });
 
@@ -109,5 +113,6 @@ mediaCommentsRouter.delete("/comments/:commentId", requireAuth, async (req, res)
   if (!isAuthor && !isOwner) return res.status(404).json({ error: "Comment not found" });
   await comment.deleteOne();
   await releasePictures([comment]);
+  await removeReplies(MediaComment, comment);
   res.status(204).end();
 });

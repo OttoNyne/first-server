@@ -7,11 +7,15 @@ const blogCommentSchema = new mongoose.Schema(
     author: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     content: { type: String, default: "", maxlength: 1000, required: function needsWords() { return !this.imageUrl; } },
     imageUrl: { type: String, default: null },
+    // The top-level comment this one is a reply to (null for a comment that isn't a reply).
+    parent: { type: mongoose.Schema.Types.ObjectId, ref: "BlogComment", default: null },
     // When the author last changed what they wrote (null if never).
     editedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
+
+blogCommentSchema.index({ parent: 1 });
 
 // An entry's comments, oldest first, a page at a time.
 blogCommentSchema.index({ entry: 1, _id: 1 });
