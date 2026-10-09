@@ -22,6 +22,7 @@ import { Follow } from "../models/Follow.js";
 import { Save } from "../models/Save.js";
 import { PollVote } from "../models/PollVote.js";
 import { Mute } from "../models/Mute.js";
+import { ProcessStep } from "../models/ProcessStep.js";
 import { ChallengeEntry } from "../models/ChallengeEntry.js";
 import { WorkRequest } from "../models/WorkRequest.js";
 import { GroupTopic } from "../models/GroupTopic.js";
@@ -115,6 +116,7 @@ export async function deleteAccount(userId) {
   await Credit.deleteMany({ $or: [{ owner: id }, { person: id }] });
   await Follow.deleteMany({ $or: [{ follower: id }, { following: id }] });
   await Save.deleteMany({ $or: [{ user: id }, { targetType: "post", target: { $in: postIds } }, { targetType: "piece", target: { $in: mediaIds } }] });
+  await ProcessStep.deleteMany({ owner: id });
   await Mute.deleteMany({ $or: [{ user: id }, { muted: id }] });
   await PollVote.deleteMany({ $or: [{ user: id }, { post: { $in: postIds } }] });
   await ChallengeEntry.deleteMany({ user: id });

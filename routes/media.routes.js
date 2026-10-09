@@ -5,6 +5,7 @@ import { MediaItem } from "../models/MediaItem.js";
 import { MediaComment } from "../models/MediaComment.js";
 import { Album } from "../models/Album.js";
 import { User } from "../models/User.js";
+import { ProcessStep } from "../models/ProcessStep.js";
 import { requireAuth, attachUserIfPresent } from "../middleware/auth.js";
 import { upload } from "../middleware/upload.js";
 import { recordStoredAsset, deleteStoredAssetIfUnused } from "../services/storedAssets.js";
@@ -161,8 +162,9 @@ mediaRouter.get("/user/:username", attachUserIfPresent, async (req, res) => {
     const counts = new Map((await MediaComment.aggregate([{ $match: { item: { $in: ids } } }, { $group: { _id: "$item", n: { $sum: 1 } } }])).map((c) => [String(c._id), c.n]));
     const credits = await creditsForItems(ids, req.user?.id);
     const saved = await savedIdsOf("piece", ids, req.user?.id);
+    const processCounts = new Map((await ProcessStep.aggregate([{ $match: { piece: { $in: ids } } }, { $group: { _id: "$piece", n: { $sum: 1 } } }])).map((c) => [String(c._id), c.n]));
     res.json({
-      media: items.map((item) => ({ ...toPublicMediaItem(item, { reactions: summary.get(String(item._id)), commentCount: counts.get(String(item._id)) ?? 0 }), credits: credits.get(String(item._id)) ?? [], saved: saved.has(String(item._id)), featured: String(item._id) === featuredId })),
+      media: items.map((item) => ({ ...toPublicMediaItem(item, { reactions: summary.get(String(item._id)), commentCount: counts.get(String(item._id)) ?? 0 }), credits: credits.get(String(item._id)) ?? [], saved: saved.has(String(item._id)), featured: String(item._id) === featuredId, processCount: processCounts.get(String(item._id)) ?? 0 })),
     });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -241,6 +243,9 @@ mediaRouter.delete("/:id", requireAuth, async (req, res) => {
   await Credit.deleteMany({ item: item._id });
   await ChallengeEntry.deleteMany({ item: item._id });
   await Save.deleteMany({ targetType: "piece", target: item._id });
+  const steps = await ProcessStep.find({ piece: item._id });
+  await ProcessStep.deleteMany({ piece: item._id });
+  await releasePictures(steps.map((s) => ({ author: s.owner, imageUrl: s.imageUrl })));
   await User.updateOne({ _id: item.owner, featuredPiece: item._id }, { $set: { featuredPiece: null } });
   await Notification.deleteMany({ type: { $in: ["credit_request", "credit_accepted"] }, "payload.itemId": String(item._id) });
   const withPictures = await MediaComment.find({ item: item._id, imageUrl: { $ne: null } });

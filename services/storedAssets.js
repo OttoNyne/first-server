@@ -8,6 +8,7 @@ import { Group } from "../models/Group.js";
 import { Comment } from "../models/Comment.js";
 import { ProfileComment } from "../models/ProfileComment.js";
 import { MediaComment } from "../models/MediaComment.js";
+import { ProcessStep } from "../models/ProcessStep.js";
 
 export async function recordStoredAsset({ ownerId, url, publicId, resourceType = "image", kind = "ai" }) {
   if (!url || !publicId) return;
@@ -15,7 +16,7 @@ export async function recordStoredAsset({ ownerId, url, publicId, resourceType =
 }
 
 async function isStillReferenced(url) {
-  const [post, user, media, track, group, comment, testimonial, pieceComment] = await Promise.all([
+  const [post, user, media, track, group, comment, testimonial, pieceComment, step] = await Promise.all([
     Post.exists({ imageUrl: url }),
     User.exists({ $or: [{ avatarUrl: url }, { wallpaperUrl: url }] }),
     MediaItem.exists({ url }),
@@ -24,8 +25,9 @@ async function isStillReferenced(url) {
     Comment.exists({ imageUrl: url }),
     ProfileComment.exists({ imageUrl: url }),
     MediaComment.exists({ imageUrl: url }),
+    ProcessStep.exists({ imageUrl: url }),
   ]);
-  return Boolean(post || user || media || track || group || comment || testimonial || pieceComment);
+  return Boolean(post || user || media || track || group || comment || testimonial || pieceComment || step);
 }
 
 function destroyAsset(asset) {
