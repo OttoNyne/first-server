@@ -117,6 +117,10 @@ export function describePush(n, actor, recipient) {
       return { body: say("work_request"), url: `${mine}#work` };
     case "work_reply":
       return { body: say("work_reply"), url: `${mine}#work` };
+    case "call_match":
+    case "call_application":
+    case "call_answer":
+      return { body: say(n.type), url: p.callId ? `/calls/${id(p.callId)}` : "/calls" };
     case "reply":
       return { body: say("reply"), url: isSitePath(p.url) ? p.url : "/" };
     case "repost":

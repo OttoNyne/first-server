@@ -33,6 +33,8 @@ import { Save } from "../models/Save.js";
 import { PollVote } from "../models/PollVote.js";
 import { Mute } from "../models/Mute.js";
 import { ProcessStep } from "../models/ProcessStep.js";
+import { Call } from "../models/Call.js";
+import { CallApplication } from "../models/CallApplication.js";
 import { ChallengeEntry } from "../models/ChallengeEntry.js";
 import { WorkRequest } from "../models/WorkRequest.js";
 
@@ -94,6 +96,9 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
   const challengeEntries = await rows("challengeEntries", ChallengeEntry.find({ user: id }));
   const followRows = await rows("following", Follow.find({ follower: id }));
   const stepRows = await rows("processSteps", ProcessStep.find({ owner: id }));
+  const callRows = await rows("calls", Call.find({ owner: id }));
+  const applicationRows = await rows("callApplications", CallApplication.find({ applicant: id }));
+  const appliedTo = new Map((await Call.find({ _id: { $in: applicationRows.map((a) => a.call) } }).select("title").lean()).map((c) => [String(c._id), c.title]));
   const muteRows = await rows("muted", Mute.find({ user: id }));
   const muteNames = (await User.find({ _id: { $in: muteRows.map((m) => m.muted) } }).select("username").lean()).map((u) => u.username);
   const followNames = (await User.find({ _id: { $in: followRows.map((f) => f.following) } }).select("username").lean()).map((u) => u.username);
@@ -186,6 +191,8 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
       commentsYouWrote: mediaComments.map((c) => ({ id: String(c._id), onPiece: String(c.item), text: text(c.content), pictureUrl: c.imageUrl ?? null, posted: iso(c.createdAt) })),
     },
     following: followNames,
+    openCalls: callRows.map((c) => ({ id: String(c._id), title: text(c.title), details: text(c.details), lookingFor: c.lookingFor ?? [], budget: text(c.budget), deadline: c.deadline ? iso(c.deadline).slice(0, 10) : null, status: c.status, posted: iso(c.createdAt) })),
+    callApplications: applicationRows.map((a) => ({ call: String(a.call), callTitle: appliedTo.get(String(a.call)) ?? null, note: text(a.note), piece: a.piece ? String(a.piece) : null, status: a.status, reply: text(a.reply), applied: iso(a.createdAt) })),
     processSteps: stepRows.map((s) => ({ piece: String(s.piece), position: s.position, text: text(s.content), pictureUrl: s.imageUrl ?? null, added: iso(s.createdAt), edited: iso(s.editedAt) })),
     muted: { people: muteNames, words: user.mutedWords ?? [] },
     pollVotes: voteRows.map((v) => ({ post: String(v.post), choice: voted.get(String(v.post))?.[v.option] ?? null, votedAt: v.createdAt })),

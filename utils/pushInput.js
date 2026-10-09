@@ -3,11 +3,11 @@
 /** The switches a person has, and the notification types each one covers. */
 export const PUSH_CATEGORIES = {
   messages: ["message"],
-  friends: ["friend_request", "friend_accept", "invite_joined", "group_invite", "friend_birthday", "credit_request", "credit_accepted", "work_request", "work_reply", "follow", "repost"],
+  friends: ["friend_request", "friend_accept", "invite_joined", "group_invite", "friend_birthday", "credit_request", "credit_accepted", "work_request", "work_reply", "follow", "repost", "call_application", "call_answer"],
   comments: ["comment", "profile_comment", "media_comment", "blog_comment", "reaction", "mention", "reply"],
   events: ["event_created", "event_updated", "event_cancelled", "event_reminder", "live_scheduled", "live_reminder"],
   live: ["live_started"],
-  updates: ["blog_post", "help_offer", "help_accepted", "report_resolved", "content_removed", "cs_verified"],
+  updates: ["blog_post", "help_offer", "help_accepted", "call_match", "report_resolved", "content_removed", "cs_verified"],
 };
 export const CATEGORY_NAMES = Object.keys(PUSH_CATEGORIES);
 

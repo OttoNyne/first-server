@@ -23,6 +23,8 @@ import { Save } from "../models/Save.js";
 import { PollVote } from "../models/PollVote.js";
 import { Mute } from "../models/Mute.js";
 import { ProcessStep } from "../models/ProcessStep.js";
+import { Call } from "../models/Call.js";
+import { CallApplication } from "../models/CallApplication.js";
 import { ChallengeEntry } from "../models/ChallengeEntry.js";
 import { WorkRequest } from "../models/WorkRequest.js";
 import { GroupTopic } from "../models/GroupTopic.js";
@@ -117,6 +119,9 @@ export async function deleteAccount(userId) {
   await Follow.deleteMany({ $or: [{ follower: id }, { following: id }] });
   await Save.deleteMany({ $or: [{ user: id }, { targetType: "post", target: { $in: postIds } }, { targetType: "piece", target: { $in: mediaIds } }] });
   await ProcessStep.deleteMany({ owner: id });
+  const callIds = (await Call.find({ owner: id }).select("_id")).map((c) => c._id);
+  await CallApplication.deleteMany({ $or: [{ applicant: id }, { call: { $in: callIds } }] });
+  await Call.deleteMany({ owner: id });
   await Mute.deleteMany({ $or: [{ user: id }, { muted: id }] });
   await PollVote.deleteMany({ $or: [{ user: id }, { post: { $in: postIds } }] });
   await ChallengeEntry.deleteMany({ user: id });
