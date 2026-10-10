@@ -10,6 +10,7 @@ import { ProfileComment } from "../models/ProfileComment.js";
 import { MediaComment } from "../models/MediaComment.js";
 import { ProcessStep } from "../models/ProcessStep.js";
 import { ProjectMessage } from "../models/ProjectMessage.js";
+import { ScheduledPost } from "../models/ScheduledPost.js";
 
 export async function recordStoredAsset({ ownerId, url, publicId, resourceType = "image", kind = "ai" }) {
   if (!url || !publicId) return;
@@ -17,7 +18,7 @@ export async function recordStoredAsset({ ownerId, url, publicId, resourceType =
 }
 
 async function isStillReferenced(url) {
-  const [post, user, media, track, group, comment, testimonial, pieceComment, step, roomMessage] = await Promise.all([
+  const [post, user, media, track, group, comment, testimonial, pieceComment, step, roomMessage, scheduled] = await Promise.all([
     Post.exists({ imageUrl: url }),
     User.exists({ $or: [{ avatarUrl: url }, { wallpaperUrl: url }] }),
     MediaItem.exists({ url }),
@@ -28,8 +29,9 @@ async function isStillReferenced(url) {
     MediaComment.exists({ imageUrl: url }),
     ProcessStep.exists({ imageUrl: url }),
     ProjectMessage.exists({ imageUrl: url }),
+    ScheduledPost.exists({ imageUrl: url }),
   ]);
-  return Boolean(post || user || media || track || group || comment || testimonial || pieceComment || step || roomMessage);
+  return Boolean(post || user || media || track || group || comment || testimonial || pieceComment || step || roomMessage || scheduled);
 }
 
 function destroyAsset(asset) {

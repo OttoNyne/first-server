@@ -82,7 +82,7 @@ profilesRouter.get("/tags", requireAuth, async (req, res) => {
 
 profilesRouter.patch("/me", requireAuth, async (req, res) => {
   const user = await User.findById(req.user.id);
-  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections, showActivity, chatStatus, profileViews, showConnections, language, openToWork, workOffers, workNote, listInSearchEngines } = req.body;
+  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections, showActivity, chatStatus, profileViews, showConnections, language, openToWork, workOffers, workNote, listInSearchEngines, allowEmbeds } = req.body;
   const fields = {};
   // the theme is checked before anything is changed, so a bad setting leaves the profile exactly as it was
   const themeChange = theme !== undefined ? checkTheme(theme) : null;
@@ -113,6 +113,10 @@ profilesRouter.patch("/me", requireAuth, async (req, res) => {
   if (listInSearchEngines !== undefined) {
     if (typeof listInSearchEngines !== "boolean") return res.status(400).json({ error: "listInSearchEngines must be true or false" });
     fields.listInSearchEngines = listInSearchEngines;
+  }
+  if (allowEmbeds !== undefined) {
+    if (typeof allowEmbeds !== "boolean") return res.status(400).json({ error: "allowEmbeds must be true or false" });
+    fields.allowEmbeds = allowEmbeds;
   }
   if (openToWork !== undefined) {
     if (typeof openToWork !== "boolean") return res.status(400).json({ error: "openToWork must be true or false" });

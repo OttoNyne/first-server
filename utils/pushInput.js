@@ -7,7 +7,7 @@ export const PUSH_CATEGORIES = {
   comments: ["comment", "profile_comment", "media_comment", "blog_comment", "reaction", "mention", "reply", "critique_note", "critique_thanks"],
   events: ["event_created", "event_updated", "event_cancelled", "event_reminder", "live_scheduled", "live_reminder"],
   live: ["live_started"],
-  updates: ["blog_post", "help_offer", "help_accepted", "call_match", "report_resolved", "content_removed", "cs_verified"],
+  updates: ["blog_post", "help_offer", "help_accepted", "call_match", "report_resolved", "content_removed", "cs_verified", "scheduled_post"],
 };
 export const CATEGORY_NAMES = Object.keys(PUSH_CATEGORIES);
 

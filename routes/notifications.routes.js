@@ -7,6 +7,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { toPublicUser } from "../utils/serialize.js";
 import { mutedUserIds } from "../utils/mutes.js";
 import { processDueReminders } from "../services/scheduledLives.js";
+import { publishDuePosts } from "../services/scheduledPosts.js";
 import { processDueEventReminders } from "../services/events.js";
 import { processBirthdays } from "../services/birthdays.js";
 
@@ -16,6 +17,7 @@ notificationsRouter.use(requireAuth);
 notificationsRouter.get("/", async (req, res) => {
   // a server that slept through a start time catches up the moment anyone looks
   await processDueReminders().catch((err) => console.error("Reminder check failed:", err.message));
+  await publishDuePosts().catch((err) => console.error("Scheduled post check failed:", err.message));
   await processDueEventReminders().catch((err) => console.error("Event reminder check failed:", err.message));
   await processBirthdays().catch((err) => console.error("Birthday check failed:", err.message));
   // Newest first, thirty at a time; ?before=<notification id> asks for the ones older than that.

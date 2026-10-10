@@ -29,6 +29,8 @@ import { callsRouter } from "./routes/calls.routes.js";
 import { projectsRouter } from "./routes/projects.routes.js";
 import { topicsRouter } from "./routes/topics.routes.js";
 import { critiquesRouter } from "./routes/critiques.routes.js";
+import { scheduledPostsRouter } from "./routes/scheduledPosts.routes.js";
+import { embedRouter } from "./routes/embed.routes.js";
 import { digestRouter } from "./routes/digest.routes.js";
 import { eventsRouter } from "./routes/events.routes.js";
 import { aboutRouter } from "./routes/about.routes.js";
@@ -116,6 +118,8 @@ app.use("/api/media", mediaRouter);
 app.use("/api/credits", creditsRouter);
 app.use("/api/work-requests", workRequestsRouter);
 app.use("/api/preview", previewRouter);
+// an embedded piece or profile card is read by people who aren't signed in, so it goes before moderationRouter too
+app.use("/api/embed", embedRouter);
 // the challenge gallery can be looked at without signing in, so it goes before moderationRouter
 app.use("/api/challenges", challengesRouter);
 app.use("/api/mentions", mentionsRouter);
@@ -146,6 +150,7 @@ app.use("/api/tracks", tracksRouter);
 app.use("/api/tasks", tasksRouter);
 app.use("/api/messages", messagesRouter);
 app.use("/api/scheduled-lives", scheduledLivesRouter);
+app.use("/api/scheduled-posts", scheduledPostsRouter);
 app.use("/api/blog", blogCommentsRouter);
 app.use("/api/search", searchRouter);
 app.use("/api/push", pushRouter);

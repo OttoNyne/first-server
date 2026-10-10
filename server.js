@@ -14,6 +14,7 @@ await connectDB();
 const { app } = await import("./app.js");
 const { describeMail } = await import("./utils/mailer.js");
 const { startReminderTimer } = await import("./services/scheduledLives.js");
+const { startScheduledPostTimer } = await import("./services/scheduledPosts.js");
 const { startEventReminderTimer } = await import("./services/events.js");
 const { startBirthdayTimer } = await import("./services/birthdays.js");
 const { startCsVerifiedTimer } = await import("./services/csVerified.js");
@@ -36,6 +37,7 @@ app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
   console.log(describeMail());
   startReminderTimer(); // "your live starts soon" reminders
+  startScheduledPostTimer(); // posts people asked to be published later
   startEventReminderTimer(); // "your event starts soon" reminders
   startBirthdayTimer(); // "it's their birthday" notes to friends
   startCsVerifiedTimer(); // the CSverified badge, earned with 1,000 active friends

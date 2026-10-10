@@ -28,6 +28,8 @@ import { ProjectMessage } from "../models/ProjectMessage.js";
 import { deleteProject, removeMember } from "./projects.js";
 import { ProcessStep } from "../models/ProcessStep.js";
 import { Critique } from "../models/Critique.js";
+import { ScheduledPost } from "../models/ScheduledPost.js";
+import { removeScheduledPost } from "./scheduledPosts.js";
 import { CritiqueNote } from "../models/CritiqueNote.js";
 import { deleteCritique } from "./removal.js";
 import { Call } from "../models/Call.js";
@@ -131,6 +133,8 @@ export async function deleteAccount(userId) {
   const roomMessages = await ProjectMessage.find({ author: id });
   await ProjectMessage.deleteMany({ author: id });
   await releasePictures(roomMessages);
+  // posts they asked to be published later never will be
+  for (const waiting of await ScheduledPost.find({ author: id })) await removeScheduledPost(waiting);
   // feedback: the requests they asked (with every note on them) and the notes they wrote on other people's
   for (const request of await Critique.find({ owner: id })) await deleteCritique(request);
   const notesWritten = await CritiqueNote.find({ author: id }).select("critique");

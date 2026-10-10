@@ -117,6 +117,8 @@ export function describePush(n, actor, recipient) {
       return { body: say("work_request"), url: `${mine}#work` };
     case "work_reply":
       return { body: say("work_reply"), url: `${mine}#work` };
+    case "scheduled_post":
+      return p.failed ? { body: say("scheduled_post_failed"), url: "/" } : { body: say("scheduled_post"), url: p.postId ? `/posts/${id(p.postId)}` : "/" };
     case "critique_note":
     case "critique_thanks":
       return { body: say(n.type), url: p.critiqueId ? `/critiques/${id(p.critiqueId)}` : "/critiques" };

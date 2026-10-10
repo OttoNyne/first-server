@@ -20,7 +20,7 @@ export const MAX_DESCRIPTION = 200;
 const MAX_SITEMAP = 5000;
 
 /** The address the site is really served on: the one with www when there is one (the bare domain only redirects to it), so links, canonical addresses and the sitemap all name the same host. */
-const publicSite = () => clientOrigins().find((o) => o.startsWith("https://www.")) ?? clientOrigins()[0];
+export const publicSite = () => clientOrigins().find((o) => o.startsWith("https://www.")) ?? clientOrigins()[0];
 
 /** Text made safe to put in a page, in an attribute or between tags: nothing in it can be read as markup. */
 export function escapeHtml(value) {

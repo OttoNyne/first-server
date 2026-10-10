@@ -121,7 +121,7 @@ postsRouter.get("/:id", async (req, res) => {
 // controls are only a convenience.
 const ASPECTS = ["original", "1:1", "4:3", "16:9"];
 const POSITION = /^(\d{1,3})% (\d{1,3})%$/;
-function readFraming(body) {
+export function readFraming(body) {
   const out = {};
   if (body.imageAspect !== undefined && body.imageAspect !== null) {
     if (!ASPECTS.includes(body.imageAspect)) return { error: "Picture shape must be original, 1:1, 4:3 or 16:9" };
@@ -143,7 +143,7 @@ function readFraming(body) {
 
 export const MAX_ALT = 300;
 /** A picture's description: one line of plain text up to 300 characters, or nothing. Returns { value } or { error }. */
-function readAlt(value) {
+export function readAlt(value) {
   if (value === undefined || value === null) return { value: "" };
   if (typeof value !== "string") return { error: "A picture description must be text" };
   const text = cleanLine(value);
