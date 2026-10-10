@@ -9,6 +9,7 @@ import { toPublicUser } from "../utils/serialize.js";
 import { createLimiter } from "../utils/rateLimit.js";
 import { clientIp } from "../utils/clientIp.js";
 import { usernameSchema } from "../utils/username.js";
+import { TERMS_VERSION } from "../utils/terms.js";
 import { UsernameHistory } from "../models/UsernameHistory.js";
 import { PasswordReset } from "../models/PasswordReset.js";
 import { sendMail, mailAvailable } from "../utils/mailer.js";
@@ -44,6 +45,8 @@ const registerSchema = z.object({
   invite: z.string().max(64).optional(),
   // The language the page is in, so what the site emails is in it too.
   language: z.enum(LANGUAGES).optional(),
+  // Ticked "I'm at least 13 and I agree to the Terms and the Privacy Policy" on the sign-up page.
+  acceptedTerms: z.boolean().optional(),
 });
 
 const loginSchema = z.object({
@@ -59,14 +62,14 @@ authRouter.post("/register", async (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.issues[0].message });
     }
-    const { email, username, password, displayName, invite, language } = parsed.data;
+    const { email, username, password, displayName, invite, language, acceptedTerms } = parsed.data;
 
     const existing = await User.findOne({ $or: [{ email }, { username: username.toLowerCase() }] });
     if (existing || (await UsernameHistory.exists({ username: username.toLowerCase() }))) {
       return res.status(409).json({ error: "Email or username already taken" });
     }
 
-    const user = new User({ email, username, displayName, ...(language ? { language } : {}) });
+    const user = new User({ email, username, displayName, ...(language ? { language } : {}), ...(acceptedTerms === true ? { termsAcceptedAt: new Date(), termsVersion: TERMS_VERSION } : {}) });
     user.password = password;
     await user.save();
 

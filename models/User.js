@@ -79,6 +79,9 @@ const userSchema = new mongoose.Schema(
     listInSearchEngines: { type: Boolean, default: false },
     // Whether this person's public pieces and profile card may be shown inside other websites (see routes/embed.routes.js). Off by default.
     allowEmbeds: { type: Boolean, default: false },
+    // When the person agreed to the Terms and the Privacy Policy at sign-up, and which version of them (see utils/terms.js). Absent for accounts made before.
+    termsAcceptedAt: { type: Date, default: null },
+    termsVersion: { type: String, default: null },
     // The CSverified badge, in two independent parts: given by an administrator, or earned by having 1,000 active friends (see
     // services/csVerified.js). Neither can be set from a request by the person themselves.
     csVerifiedByAdmin: { type: Boolean, default: false },

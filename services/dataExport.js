@@ -169,6 +169,8 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
       workNote: text(user.workNote),
       listInSearchEngines: user.listInSearchEngines === true,
       allowEmbeds: user.allowEmbeds === true,
+      termsAcceptedAt: iso(user.termsAcceptedAt),
+      termsVersion: user.termsVersion ?? null,
       aboutMe: {
         interests: text(user.about?.interests),
         music: text(user.about?.music),
