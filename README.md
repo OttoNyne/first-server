@@ -25,7 +25,17 @@ over the project's own documents:
 | `search_docs` | Answers a question from the architecture notes, security review and this README, with the document, section and a link to cite |
 
 Every call is written to an audit log (`McpAuditEntry`; administrators read it at `GET /api/mcp/audit`; entries expire after 180 days), whether it worked
-or not. `node scripts/mcp-demo.mjs [address]` runs the tools with the official client; `node scripts/export-mcp-audit.mjs` writes the log as Markdown.
+or not. `node scripts/mcp-demo.mjs [address]` runs the tools with the official client; `node scripts/export-mcp-audit.mjs` writes the log as Markdown;
+`node scripts/mcp-eval.mjs [address]` measures the document search against 34 golden questions. `MCP_DISABLED=true` switches the server off (every tool
+address answers 503) without a deploy.
+
+Its write-up lives with the website's documents:
+[decision record](https://github.com/OttoNyne/CreativesSelect/blob/master/docs/mcp/DECISION_DOC.md),
+[evaluation report](https://github.com/OttoNyne/CreativesSelect/blob/master/docs/mcp/EVAL_REPORT.md),
+[autonomy justification](https://github.com/OttoNyne/CreativesSelect/blob/master/docs/mcp/AUTONOMY_JUSTIFICATION.md),
+[value memo](https://github.com/OttoNyne/CreativesSelect/blob/master/docs/mcp/VALUE_MEMO.md),
+[rollback evidence](https://github.com/OttoNyne/CreativesSelect/blob/master/docs/mcp/ROLLBACK_EVIDENCE.md) and
+[audit log](https://github.com/OttoNyne/CreativesSelect/blob/master/docs/mcp/MCP_AUDIT_LOG.md).
 
 ## Setup
 
