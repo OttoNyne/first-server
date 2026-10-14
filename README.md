@@ -11,6 +11,22 @@ architecture, data model, and API reference are documented there in
 the security audit and penetration-testing writeup is in
 [`docs/SECURITY_REVIEW.md`](https://github.com/OttoNyne/CreativesSelect/blob/master/docs/SECURITY_REVIEW.md).
 
+## MCP server
+
+The API also runs a [Model Context Protocol](https://modelcontextprotocol.io) server at `/api/mcp` (Streamable HTTP, stateless, JSON responses), live at
+**https://www.creativesselect.com/api/mcp**. It gives an AI assistant four read-only tools over what a visitor who isn't signed in could already see, and
+over the project's own documents:
+
+| Tool | What it does |
+|---|---|
+| `search_creators` | Public members by words in their name, username, bio or tags, by a tag, or those open to work |
+| `get_creator` | One public member: card, newest pieces and posts, each with a link |
+| `find_pieces` | Public portfolio pieces by tag, caption words or kind |
+| `search_docs` | Answers a question from the architecture notes, security review and this README, with the document, section and a link to cite |
+
+Every call is written to an audit log (`McpAuditEntry`; administrators read it at `GET /api/mcp/audit`; entries expire after 180 days), whether it worked
+or not. `node scripts/mcp-demo.mjs [address]` runs the tools with the official client; `node scripts/export-mcp-audit.mjs` writes the log as Markdown.
+
 ## Setup
 
 ```bash

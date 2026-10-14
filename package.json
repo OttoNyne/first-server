@@ -12,6 +12,7 @@
   "keywords": [],
   "type": "module",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@simplewebauthn/server": "^14.0.3",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.11.0",

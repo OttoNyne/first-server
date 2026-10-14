@@ -31,6 +31,7 @@ import { topicsRouter } from "./routes/topics.routes.js";
 import { critiquesRouter } from "./routes/critiques.routes.js";
 import { scheduledPostsRouter } from "./routes/scheduledPosts.routes.js";
 import { embedRouter } from "./routes/embed.routes.js";
+import { mcpRouter } from "./routes/mcp.routes.js";
 import { digestRouter } from "./routes/digest.routes.js";
 import { eventsRouter } from "./routes/events.routes.js";
 import { aboutRouter } from "./routes/about.routes.js";
@@ -120,6 +121,8 @@ app.use("/api/work-requests", workRequestsRouter);
 app.use("/api/preview", previewRouter);
 // an embedded piece or profile card is read by people who aren't signed in, so it goes before moderationRouter too
 app.use("/api/embed", embedRouter);
+// the MCP server is for programs that aren't signed in (its audit log asks for an administrator itself), so it goes before moderationRouter too
+app.use("/api/mcp", mcpRouter);
 // the challenge gallery can be looked at without signing in, so it goes before moderationRouter
 app.use("/api/challenges", challengesRouter);
 app.use("/api/mentions", mentionsRouter);
