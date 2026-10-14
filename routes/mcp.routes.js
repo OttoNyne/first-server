@@ -15,6 +15,14 @@ import { publicSite } from "./preview.routes.js";
 export const mcpRouter = Router();
 
 const limiter = createLimiter({ name: "mcp", limit: 300, windowMs: 60 * 60 * 1000 });
+
+// The off switch: set MCP_DISABLED=true on the server and every tool address answers 503 at once (the audit log stays readable), with no
+// redeploy and nothing else on the API affected. Remove it to switch the server back on.
+mcpRouter.use((req, res, next) => {
+  if (process.env.MCP_DISABLED !== "true" || req.path.startsWith("/audit")) return next();
+  res.set("Retry-After", "3600");
+  res.status(503).json({ jsonrpc: "2.0", error: { code: -32000, message: "The MCP server is switched off" }, id: null });
+});
 const PAGE = 50;
 
 mcpRouter.get("/", (req, res) => {

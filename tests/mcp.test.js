@@ -87,6 +87,23 @@ describe("the MCP server", () => {
     });
   });
 
+  describe("the off switch", () => {
+    it("answers 503 on every tool address while MCP_DISABLED is true, leaves the rest of the API and the log alone, and works again when it is removed", async () => {
+      process.env.MCP_DISABLED = "true";
+      try {
+        expect((await rpc("tools/list", {})).status).toBe(503);
+        expect((await call("search_creators", {})).status).toBe(503);
+        expect((await request(app).get("/api/mcp")).status).toBe(503);
+        expect((await request(app).get("/api/health")).status).toBe(200);
+        expect((await request(app).get("/api/mcp/audit")).status).toBe(401); // still asks for an administrator, not switched off
+        expect(await M.McpAuditEntry.countDocuments()).toBe(0); // nothing ran, so nothing is logged
+      } finally {
+        delete process.env.MCP_DISABLED;
+      }
+      expect((await rpc("tools/list", {})).status).toBe(200);
+    });
+  });
+
   describe("people and work", () => {
     it("finds only public members, with no email, and by words, tag or being open to work", async () => {
       const ann = await signup(app, "annpotter");
@@ -153,7 +170,7 @@ describe("the MCP server", () => {
 
   describe("the documents", () => {
     it("answers a question with passages from the documents, each with where it came from, and nothing when they don't cover it", async () => {
-      const got = data(await call("search_docs", { question: "How does a scheduled post avoid being published twice?" }));
+      const got = data(await call("search_docs", { question: "How does a scheduled post claim a due record with one atomic update?" }));
       expect(got.count).toBeGreaterThan(0);
       const top = got.passages[0];
       expect(top).toMatchObject({ source: "architecture", section: "Scheduled posts" });
@@ -163,6 +180,22 @@ describe("the MCP server", () => {
       const none = data(await call("search_docs", { question: "What is the airspeed velocity of an unladen swallow" }));
       expect(none.count).toBe(0);
       expect(none.passages).toEqual([]);
+    });
+
+    it("returns nothing when most of what was asked about is in none of the documents, even if one word is", async () => {
+      // "scheduled" and "post" are in the documents; the rest of the question is not
+      const got = data(await call("search_docs", { question: "Which scheduled post offers a premium subscription discount in France?" }));
+      expect(got.count).toBe(0);
+      // but a question whose words are in a section finds it
+      expect(data(await call("search_docs", { question: "scheduled posts atomic update" })).passages[0].section).toBe("Scheduled posts");
+    });
+
+    it("does not prefer a section for being long: a short section about the topic beats a long one that mentions it in passing", async () => {
+      const filler = "Filler words about many unrelated matters. ".repeat(400);
+      const long = ["# Long", "", "## Everything", `${filler} Embedding is mentioned here once.`, "", "## Embedding", "Embedded cards are small pages with no scripts for another site to show.", ""].join("\n");
+      knowledge.setDocFetcher(async (url) => (url.includes("ARCHITECTURE") ? new Response(long) : new Response("", { status: 404 })));
+      const got = data(await call("search_docs", { question: "How do embedded cards work?" }));
+      expect(got.passages[0].section).toBe("Embedding");
     });
 
     it("still answers from the documents it can read when one can't be fetched, and rejects an empty question", async () => {
@@ -185,7 +218,7 @@ describe("the MCP server", () => {
   describe("the audit log", () => {
     it("writes an entry for every call, worked or not, with what was asked (cut short), the sources and how long it took, and nothing about who", async () => {
       await call("search_creators", { query: "x".repeat(300) });
-      await call("search_docs", { question: "How does a scheduled post avoid being published twice?" });
+      await call("search_docs", { question: "How does a scheduled post claim a due record with one atomic update?" });
       await call("get_creator", { username: "nobody" });
       const entries = await M.McpAuditEntry.find().sort({ at: 1 }).lean();
       expect(entries.map((e) => [e.tool, e.status])).toEqual([

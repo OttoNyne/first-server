@@ -1,0 +1,273 @@
+{
+  "about": "Questions for the search_docs tool, each with the section that answers it (matched by words in the section's heading, in the named document). 'direct' questions use the documents' own words, 'paraphrase' ones don't, 'out_of_scope' ones are not answered by the documents at all and should come back empty. Written by the author of the documents, before the first run, which is a limit on how much the result proves. After the first run, seven questions that are written up in both documents had the second document's section accepted too (the 'alt' lists); no label was changed to turn a wrong answer into a right one.",
+  "questions": [
+    {
+      "id": "d01",
+      "kind": "direct",
+      "q": "How do passkeys work and why can't they be typed into a fake page?",
+      "source": "security-review",
+      "section": "Passkeys"
+    },
+    {
+      "id": "d02",
+      "kind": "direct",
+      "q": "How does two-step sign-in protect an account when the password is stolen?",
+      "source": "security-review",
+      "section": "Two-step sign-in"
+    },
+    {
+      "id": "d03",
+      "kind": "direct",
+      "q": "How are direct messages kept private between two people?",
+      "source": "security-review",
+      "section": "Direct messages"
+    },
+    {
+      "id": "d04",
+      "kind": "direct",
+      "q": "What does the weekly summary email contain and when is it sent?",
+      "source": "architecture",
+      "section": "weekly summary",
+      "alt": [
+        {
+          "source": "security-review",
+          "section": "weekly summary"
+        }
+      ]
+    },
+    {
+      "id": "d05",
+      "kind": "direct",
+      "q": "How can a person download their own data?",
+      "source": "security-review",
+      "section": "Download my data"
+    },
+    {
+      "id": "d06",
+      "kind": "direct",
+      "q": "How do open calls work and who can answer one?",
+      "source": "architecture",
+      "section": "Open calls",
+      "alt": [
+        {
+          "source": "security-review",
+          "section": "Open calls"
+        }
+      ]
+    },
+    {
+      "id": "d07",
+      "kind": "direct",
+      "q": "Who can see a project room and what happens when someone leaves?",
+      "source": "architecture",
+      "section": "Project rooms",
+      "alt": [
+        {
+          "source": "security-review",
+          "section": "Project rooms"
+        }
+      ]
+    },
+    {
+      "id": "d08",
+      "kind": "direct",
+      "q": "Why did a deleted account's sign-in keep working and how was it fixed?",
+      "source": "security-review",
+      "section": "Sessions weren't revalidated"
+    },
+    {
+      "id": "d09",
+      "kind": "direct",
+      "q": "How is login throttled against password guessing?",
+      "source": "security-review",
+      "section": "Nothing throttled login"
+    },
+    {
+      "id": "d10",
+      "kind": "direct",
+      "q": "How do invite links avoid becoming a way for strangers in?",
+      "source": "security-review",
+      "section": "Invite links"
+    },
+    {
+      "id": "d11",
+      "kind": "direct",
+      "q": "How does the moderation review queue let administrators handle reports?",
+      "source": "security-review",
+      "section": "moderation review queue"
+    },
+    {
+      "id": "d12",
+      "kind": "direct",
+      "q": "How are push notifications sent and limited per person?",
+      "source": "security-review",
+      "section": "Push notifications"
+    },
+    {
+      "id": "d13",
+      "kind": "direct",
+      "q": "How does the CSverified badge get earned?",
+      "source": "security-review",
+      "section": "CSverified"
+    },
+    {
+      "id": "d14",
+      "kind": "direct",
+      "q": "How does Explore show hashtags without exposing private profiles?",
+      "source": "architecture",
+      "section": "Hashtags and Explore",
+      "alt": [
+        {
+          "source": "security-review",
+          "section": "Hashtags and Explore"
+        }
+      ]
+    },
+    {
+      "id": "d15",
+      "kind": "direct",
+      "q": "How is search protected against ReDoS and NoSQL injection?",
+      "source": "security-review",
+      "section": "ReDoS"
+    },
+    {
+      "id": "d16",
+      "kind": "direct",
+      "q": "Why didn't music play on iPhones?",
+      "source": "security-review",
+      "section": "Music didn't play on iPhones"
+    },
+    {
+      "id": "d17",
+      "kind": "direct",
+      "q": "How does opt-in profile views work?",
+      "source": "security-review",
+      "section": "Opt-in profile views"
+    },
+    {
+      "id": "d18",
+      "kind": "direct",
+      "q": "How does a scheduled post avoid being published twice?",
+      "source": "architecture",
+      "section": "Scheduled posts",
+      "alt": [
+        {
+          "source": "security-review",
+          "section": "Scheduled posts"
+        }
+      ]
+    },
+    {
+      "id": "d19",
+      "kind": "direct",
+      "q": "Who may embed a piece on another website?",
+      "source": "architecture",
+      "section": "Embedding",
+      "alt": [
+        {
+          "source": "security-review",
+          "section": "Embeds"
+        }
+      ]
+    },
+    {
+      "id": "d20",
+      "kind": "direct",
+      "q": "What does the MCP server offer and what are its tools?",
+      "source": "architecture",
+      "section": "MCP server",
+      "alt": [
+        {
+          "source": "api-readme",
+          "section": "MCP server"
+        }
+      ]
+    },
+    {
+      "id": "p01",
+      "kind": "paraphrase",
+      "q": "Could someone pretend to be another person by registering a name that differs only in capital letters?",
+      "source": "security-review",
+      "section": "Username case-sensitivity"
+    },
+    {
+      "id": "p02",
+      "kind": "paraphrase",
+      "q": "What keeps a stranger from getting into someone's account by trying lots of passwords?",
+      "source": "security-review",
+      "section": "Nothing throttled login"
+    },
+    {
+      "id": "p03",
+      "kind": "paraphrase",
+      "q": "How does a person who forgot their password get back in without anyone else taking over the account?",
+      "source": "security-review",
+      "section": "Forgotten password"
+    },
+    {
+      "id": "p04",
+      "kind": "paraphrase",
+      "q": "How do friends find out that somebody has started broadcasting audio?",
+      "source": "security-review",
+      "section": "Telling friends when someone goes live"
+    },
+    {
+      "id": "p05",
+      "kind": "paraphrase",
+      "q": "Can a leaked link let anybody join as a friend?",
+      "source": "security-review",
+      "section": "Invite links"
+    },
+    {
+      "id": "p06",
+      "kind": "paraphrase",
+      "q": "Where do the pictures people upload end up, and why not on the server's own disk?",
+      "source": "security-review",
+      "section": "uploads on an ephemeral filesystem"
+    },
+    {
+      "id": "p07",
+      "kind": "paraphrase",
+      "q": "What did the site do wrong about people leaving for good?",
+      "source": "security-review",
+      "section": "No way to delete an account"
+    },
+    {
+      "id": "p08",
+      "kind": "paraphrase",
+      "q": "Is it safe to let other users put pictures into comments on my page?",
+      "source": "security-review",
+      "section": "Comments on pictures"
+    },
+    {
+      "id": "o01",
+      "kind": "out_of_scope",
+      "q": "What is the capital of France?"
+    },
+    {
+      "id": "o02",
+      "kind": "out_of_scope",
+      "q": "How do I bake sourdough bread at home?"
+    },
+    {
+      "id": "o03",
+      "kind": "out_of_scope",
+      "q": "Who won the 2022 football World Cup?"
+    },
+    {
+      "id": "o04",
+      "kind": "out_of_scope",
+      "q": "What is the airspeed velocity of an unladen swallow?"
+    },
+    {
+      "id": "o05",
+      "kind": "out_of_scope",
+      "q": "How many employees work at CreativesSelect?"
+    },
+    {
+      "id": "o06",
+      "kind": "out_of_scope",
+      "q": "What is the monthly price of a premium subscription?"
+    }
+  ]
+}

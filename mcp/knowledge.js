@@ -80,6 +80,12 @@ async function load(source) {
   }
 }
 
+/** Every section of every document, with its source (for the evaluation script, which compares scorers on the same passages). */
+export async function allSections() {
+  const loaded = await Promise.all(SOURCES.map(async (s) => ({ s, sections: await load(s) })));
+  return loaded.flatMap(({ s, sections }) => sections.map((sec) => ({ s, sec })));
+}
+
 const STOP = new Set("a an and are as at be by can do does for from how i if in is it its me my of on or so that the their there this to was we what when where which who why will with you your have has had been being".split(" "));
 /** A word with its commonest endings taken off, so "published" and "publishing" are looked for as "publish". */
 const stem = (w) => (w.length > 5 ? w.replace(/(ing|ed|es|ly|s)$/u, "") : w);
@@ -104,32 +110,48 @@ function snippetOf(text, terms, max = 650) {
 }
 
 /**
- * The passages that best answer a question, each with where it came from: { source, title, section, url, snippet, score }. A passage
- * scores for every word of the question in its text, more for words in its heading; nothing is returned for a question whose words
- * appear nowhere (an honest "not in the documents" rather than a loose guess).
+ * The passages that best answer a question, each with where it came from: { source, title, section, url, snippet, score }.
+ *
+ * A section is scored with BM25: each word of the question counts for how rare it is across the documents (a word found in few sections says
+ * more than one found in many), repeated mentions count with diminishing returns, a word in the heading counts triple, and long sections are
+ * not favoured just for being long. A section is only returned if the words it holds make up at least half of the weight of the whole
+ * question: a question whose important words appear nowhere gets an empty list (an honest "the documents don't cover it") rather than the
+ * least-bad section.
  */
+export const MIN_COVERAGE = 0.5;
+const K1 = 1.2;
+const B = 0.75;
 export async function searchDocs(question, limit = 4) {
   const terms = [...new Set(words(question))];
   if (terms.length === 0) return [];
   const loaded = await Promise.all(SOURCES.map(async (s) => ({ s, sections: await load(s) })));
-  const all = loaded.flatMap(({ s, sections }) => sections.map((sec) => ({ s, sec })));
-  // a word found in few sections says more than one found in many
-  const df = new Map(terms.map((t) => [t, all.filter(({ sec }) => `${sec.heading} ${sec.text}`.toLowerCase().includes(t)).length]));
+  const all = loaded.flatMap(({ s, sections }) =>
+    sections.map((sec) => {
+      const body = sec.text.toLowerCase();
+      const head = sec.heading.toLowerCase();
+      return { s, sec, body, head, length: Math.max(1, (body.match(/\S+/g) ?? []).length) };
+    })
+  );
+  const averageLength = all.reduce((n, d) => n + d.length, 0) / Math.max(1, all.length);
+  const N = all.length;
+  const idf = new Map(
+    terms.map((t) => {
+      const df = all.filter((d) => d.body.includes(t) || d.head.includes(t)).length;
+      return [t, Math.log(1 + (N - df + 0.5) / (df + 0.5))];
+    })
+  );
+  const totalWeight = terms.reduce((n, t) => n + idf.get(t), 0);
   const scored = [];
-  for (const { s, sec } of all) {
-    const body = sec.text.toLowerCase();
-    const head = sec.heading.toLowerCase();
+  for (const d of all) {
     let score = 0;
-    let matched = 0;
+    let found = 0;
     for (const t of terms) {
-      const idf = Math.log(1 + all.length / (1 + (df.get(t) ?? 0)));
-      const inBody = body.split(t).length - 1;
-      const inHead = head.includes(t);
-      if (inBody || inHead) matched += 1;
-      score += idf * (Math.min(inBody, 5) + (inHead ? 4 : 0));
+      const tf = d.body.split(t).length - 1 + 3 * (d.head.includes(t) ? 1 : 0);
+      if (tf === 0) continue;
+      found += idf.get(t);
+      score += idf.get(t) * ((tf * (K1 + 1)) / (tf + K1 * (1 - B + (B * d.length) / averageLength)));
     }
-    // a passage must hold a good part of what was asked about
-    if (matched >= Math.max(1, Math.ceil(terms.length * 0.4))) scored.push({ s, sec, score: score * (0.5 + matched / terms.length) });
+    if (found > 0 && found / totalWeight >= MIN_COVERAGE) scored.push({ s: d.s, sec: d.sec, score });
   }
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, limit).map(({ s, sec, score }) => ({
