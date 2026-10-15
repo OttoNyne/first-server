@@ -74,6 +74,10 @@ mcpRouter.post("/", async (req, res) => {
     res.set("Retry-After", String(limiter.windowSeconds));
     return res.status(429).json({ jsonrpc: "2.0", error: { code: -32000, message: "Too many requests — try again later" }, id: null });
   }
+  // The protocol library insists on "Accept: application/json, text/event-stream". This server always answers with plain JSON, so a client
+  // that sends only */* (most HTTP libraries' default), application/json, or nothing is served the same answer instead of a 406.
+  const accept = String(req.headers.accept ?? "");
+  if (!/application\/json/.test(accept) || !/text\/event-stream/.test(accept)) req.headers.accept = "application/json, text/event-stream";
   const client = req.get("user-agent") ?? "";
   const { server, calls } = buildMcpServer({ client });
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });

@@ -70,15 +70,20 @@ export const app = express();
 app.set("trust proxy", 1);
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
-app.use(
-  cors({
-    // checked on every request, against every address listed in CLIENT_URL
-    origin: (origin, callback) => callback(null, !origin || isAllowedOrigin(origin)),
-    credentials: true,
-  })
-);
+
+// The MCP address (and only that exact address, not its audit log) is a public, read-only, cookie-free endpoint that programs and browser-based
+// MCP clients call from anywhere, so it answers any origin without credentials. The origin rules below protect the cookie, and this endpoint
+// never reads it.
+const isMcpAddress = (req) => req.path === "/api/mcp" || req.path === "/api/mcp/";
+const openCors = cors({ origin: "*", methods: ["GET", "POST", "OPTIONS"], allowedHeaders: ["Content-Type", "Accept", "Mcp-Session-Id", "Mcp-Protocol-Version", "Last-Event-ID"], maxAge: 86400 });
+const strictCors = cors({
+  // checked on every request, against every address listed in CLIENT_URL
+  origin: (origin, callback) => callback(null, !origin || isAllowedOrigin(origin)),
+  credentials: true,
+});
+app.use((req, res, next) => (isMcpAddress(req) ? openCors(req, res, next) : strictCors(req, res, next)));
 // CSRF defense for the cross-site auth cookie (see middleware/csrf.js).
-app.use(requireTrustedOrigin);
+app.use((req, res, next) => (isMcpAddress(req) ? next() : requireTrustedOrigin(req, res, next)));
 app.use(morgan("dev"));
 app.use(requestTimer);
 app.use(express.json());

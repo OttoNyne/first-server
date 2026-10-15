@@ -78,9 +78,33 @@ describe("the MCP server", () => {
       }
     });
 
-    it("turns away a cross-site browser request, and limits one address", async () => {
-      const res = await request(app).post("/api/mcp").set("Origin", "https://evil.example").set("Accept", "application/json, text/event-stream").send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
-      expect(res.status).toBe(403);
+    it("is answered whatever Accept header a plain HTTP client sends, so a simple checker isn't turned away", async () => {
+      const body = { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "check", version: "1" } } };
+      for (const accept of [undefined, "*/*", "application/json", "text/event-stream", "application/json, text/event-stream"]) {
+        const req = request(app).post("/api/mcp");
+        if (accept) req.set("Accept", accept);
+        const res = await req.send(body);
+        expect(res.status, `Accept: ${accept}`).toBe(200);
+        expect(res.body.result.serverInfo.name).toBe("creativesselect");
+      }
+    });
+
+    it("answers a browser on any other site (it is public and uses no cookie), but keeps the audit log's strict rules", async () => {
+      const preflight = await request(app).options("/api/mcp").set("Origin", "https://inspector.example").set("Access-Control-Request-Method", "POST").set("Access-Control-Request-Headers", "content-type,accept");
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers["access-control-allow-origin"]).toBe("*");
+      const res = await request(app).post("/api/mcp").set("Origin", "https://inspector.example").set("Accept", "application/json, text/event-stream").send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+      expect(res.status).toBe(200);
+      expect(res.headers["access-control-allow-origin"]).toBe("*");
+      expect(res.headers["access-control-allow-credentials"]).toBeUndefined();
+      // the log is cookie-protected: another site is neither answered with an open policy nor allowed to write to the API
+      const log = await request(app).get("/api/mcp/audit").set("Origin", "https://inspector.example");
+      expect(log.headers["access-control-allow-origin"]).toBeUndefined();
+      const other = await request(app).post("/api/posts").set("Origin", "https://inspector.example").send({ content: "x" });
+      expect(other.status).toBe(403);
+    });
+
+    it("limits one address", async () => {
       await M.RateLimitHit.insertMany(Array.from({ length: 300 }, () => ({ key: "mcp:203.0.113.77", at: new Date(), expireAt: new Date(Date.now() + 60_000) })));
       const limited = await request(app).post("/api/mcp").set("x-vercel-forwarded-for", "203.0.113.77").set("Accept", "application/json, text/event-stream").send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
       expect(limited.status).toBe(429);
