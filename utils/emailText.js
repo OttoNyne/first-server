@@ -28,7 +28,36 @@ function digestText(lang, p, w) {
   return join(lang, p.name, w.intro, lines.join("\n"), `${w.open} ${p.site}`, `${w.stop}\n${p.unsubscribe}\n${w.also}`);
 }
 
+/** "1 new report" / "5 new reports" in each language (Arabic has more than two forms). */
+function reportsNew(lang, n) {
+  if (lang === "es") return n === 1 ? "1 denuncia nueva" : `${n} denuncias nuevas`;
+  if (lang === "ar") {
+    const form = new Intl.PluralRules("ar").select(n);
+    if (form === "one") return "بلاغ جديد واحد";
+    if (form === "two") return "بلاغان جديدان";
+    if (form === "few") return `${n} بلاغات جديدة`;
+    if (form === "many") return `${n} بلاغًا جديدًا`;
+    return `${n} بلاغ جديد`;
+  }
+  return n === 1 ? "1 new report" : `${n} new reports`;
+}
+
 const KINDS = {
+  // Something is waiting for a moderator: p = { name, count, open, link }. Counts and a link only, never what was reported or who by.
+  reportAlert: {
+    en: (p) => ({
+      subject: `CreativesSelect: ${reportsNew("en", p.count)} to review`,
+      text: join("en", p.name, `${reportsNew("en", p.count)} since the last alert (${p.open} open in total).`, `Open the review queue:\n${p.link}`, "This email never says what was reported or who reported it: look at it in the queue. Alerts come at most once every five minutes."),
+    }),
+    es: (p) => ({
+      subject: `CreativesSelect: ${reportsNew("es", p.count)} por revisar`,
+      text: join("es", p.name, `${reportsNew("es", p.count)} desde el último aviso (${p.open} abiertas en total).`, `Abre la cola de revisión:\n${p.link}`, "Este correo nunca dice qué se denunció ni quién lo hizo: míralo en la cola. Los avisos llegan como máximo una vez cada cinco minutos."),
+    }),
+    ar: (p) => ({
+      subject: `CreativesSelect: ${reportsNew("ar", p.count)} للمراجعة`,
+      text: join("ar", p.name, `${reportsNew("ar", p.count)} منذ آخر تنبيه (${p.open} مفتوحًا في المجموع).`, `افتح قائمة المراجعة:\n${p.link}`, "لا يذكر هذا البريد أبدًا ما تم الإبلاغ عنه ولا من أبلغ: اطّلع عليه في القائمة. تصل التنبيهات مرة كل خمس دقائق على الأكثر."),
+    }),
+  },
   // Someone asked to reset a password: p = { name, link }
   resetLink: {
     en: (p) => ({

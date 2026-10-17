@@ -1,3 +1,4 @@
+import { queueReportAlert } from "../services/reportAlerts.js";
 import { Router } from "express";
 import { Follow } from "../models/Follow.js";
 import { User } from "../models/User.js";
@@ -93,5 +94,6 @@ moderationRouter.post("/reports", async (req, res) => {
   }
 
   const report = await Report.create({ reporter: req.user.id, targetType, targetId, reason });
+  queueReportAlert(); // tell the moderators (in the background; at most one email every five minutes)
   res.status(201).json({ report });
 });

@@ -56,6 +56,8 @@ The server listens on port 5000 (override with `PORT`) and logs
 | `JWT_SECRET` | yes | Signs/verifies the auth cookie |
 | `PORT` | no (default 5000) | HTTP port |
 | `CLIENT_URL` | no (default `http://localhost:3000`) | Allowed frontend origin(s) — set this to your actual frontend address (e.g. `http://localhost:5173` in dev). To allow several addresses, separate them with commas (e.g. `https://www.example.com,https://my-app.vercel.app`); the first is used for links in emails |
+| `ADMIN_EMAILS` | no | Comma-separated addresses of the people who may moderate (the address must also be confirmed on the account). The same people get the new-report email |
+| `REPORT_ALERTS` | no (default on) | Set to `off` to stop the email that tells moderators new reports are waiting (at most one every 5 minutes; counts and a link, never what was reported) |
 | `CLOUDINARY_CLOUD_NAME` | yes (for uploads) | Cloudinary account cloud name |
 | `CLOUDINARY_API_KEY` | yes (for uploads) | Cloudinary API key |
 | `CLOUDINARY_API_SECRET` | yes (for uploads) | Cloudinary API secret |

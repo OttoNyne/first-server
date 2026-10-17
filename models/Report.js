@@ -12,8 +12,12 @@ const reportSchema = new mongoose.Schema(
     reviewedAt: { type: Date, default: null },
     action: { type: String, default: null },
     note: { type: String, default: "", maxlength: 500 },
+    // When the moderators were emailed about this report (see services/reportAlerts.js); null until they have been.
+    alertedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
+
+reportSchema.index({ alertedAt: -1 });
 
 export const Report = mongoose.model("Report", reportSchema);
