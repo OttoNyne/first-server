@@ -33,6 +33,7 @@ const TEXT = {
   event_reminder: { en: () => "An event you're going to is starting soon", es: () => "Un evento al que vas a ir empieza pronto", ar: () => "فعالية ستحضرها ستبدأ قريبًا" },
   live_scheduled: { en: ({ who }) => `${who} scheduled a live`, es: ({ who }) => `${who} programó una transmisión en vivo`, ar: ({ who }) => `${who} حدّد موعدًا لبث مباشر` },
   live_reminder: { en: () => "A live you asked about is starting soon", es: () => "Una transmisión en vivo que pediste recordar empieza pronto", ar: () => "بث مباشر طلبت التذكير به سيبدأ قريبًا" },
+  live_invite: { en: ({ who }) => `${who} invited you to a private live`, es: ({ who }) => `${who} te invitó a un directo privado`, ar: ({ who }) => `${who} دعاك إلى بث مباشر خاص` },
   live_started: { en: ({ who }) => `${who} is live now`, es: ({ who }) => `${who} está en vivo ahora`, ar: ({ who }) => `${who} يبث مباشرة الآن` },
   blog_post: { en: ({ who }) => `${who} wrote a blog entry`, es: ({ who }) => `${who} escribió una entrada del blog`, ar: ({ who }) => `${who} كتب تدوينة` },
   help_offer: { en: ({ who }) => `${who} offered to help with your request`, es: ({ who }) => `${who} se ofreció a ayudar con tu petición`, ar: ({ who }) => `${who} عرض المساعدة في طلبك` },

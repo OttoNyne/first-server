@@ -98,7 +98,8 @@ export function describePush(n, actor, recipient) {
     case "live_reminder":
       return { body: say("live_reminder"), url: "/live" };
     case "live_started":
-      return { body: say("live_started"), url: p.liveId ? `/live/${id(p.liveId)}` : "/live" };
+    case "live_invite":
+      return { body: say(n.type), url: p.liveId ? `/live/${id(p.liveId)}` : "/live" };
     case "blog_post":
       return { body: say("blog_post"), url: p.entryId ? `/blog/${id(p.entryId)}` : "/" };
     case "help_offer":

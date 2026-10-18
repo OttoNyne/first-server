@@ -99,6 +99,7 @@ async function closePlan(scheduledId, session, hostId) {
     const plan = await ScheduledLive.findOneAndUpdate({ _id: scheduledId, host: hostId, status: "scheduled" }, { $set: { status: "started", liveId: session._id } });
     if (!plan) return;
     await removePlanNotifications(plan._id);
+    if (session.private) return; // the people invited have been told, and nobody else is
     const friendships = await Friendship.find({ status: "accepted", $or: [{ requester: hostId }, { addressee: hostId }] });
     const alreadyTold = new Set(friendships.map((f) => (String(f.requester) === String(hostId) ? String(f.addressee) : String(f.requester))));
     const blocked = await blockedUserIds(hostId);
@@ -112,7 +113,7 @@ async function closePlan(scheduledId, session, hostId) {
 
 // "X is live" notifications are only useful while the live is on, so they go when it ends.
 const removeLiveNotifications = (sessionIds) =>
-  Notification.deleteMany({ type: "live_started", "payload.liveId": { $in: sessionIds.map(String) } });
+  Notification.deleteMany({ type: { $in: ["live_started", "live_invite"] }, "payload.liveId": { $in: sessionIds.map(String) } });
 
 // Tells the host's friends they've gone live. A failure here must never stop the live from starting.
 async function notifyFriendsOfLive(session, hostId) {
@@ -162,6 +163,7 @@ async function serializeSession(session, host, viewerId) {
     listenerCount: await listenerCount(session),
     maxListeners: capacityOf(session),
     mode: session.mode ?? "mesh",
+    private: Boolean(session.private),
     // How many listeners the host can bring on stage to speak (only big lives, which use the media server, have a stage).
     maxGuests: session.mode === "sfu" ? MAX_STAGE_GUESTS : 0,
     ...pollHints(session),
@@ -184,6 +186,11 @@ async function loadVisible(req, res) {
     await assertVisible(host, req.user.id);
   } catch (err) {
     // Same answer as a missing room, so a blocked or private host's live can't be told apart from none.
+    res.status(404).json({ error: "Live not found" });
+    return null;
+  }
+  // and the same for an invite-only live that this person wasn't invited to
+  if (!mayEnter(session, req.user.id)) {
     res.status(404).json({ error: "Live not found" });
     return null;
   }
@@ -239,6 +246,36 @@ export async function removeListenersBetween(idA, idB) {
 }
 
 const isHostOf = (session, userId) => String(session.host) === String(userId);
+// An invite-only live is open to its host and the people they invited, and to nobody else.
+const mayEnter = (session, userId) => !session.private || isHostOf(session, userId) || (session.invited ?? []).some((id) => String(id) === String(userId));
+export const MAX_INVITED = 100;
+const inviteLimiter = createLimiter({ name: "live-invite", limit: 200, windowMs: 60 * 60 * 1000 });
+
+/** The people a host may invite: their own friends, not blocked either way. `{ ids }` (without repeats) or `{ error }`. */
+async function checkInvitees(hostId, raw) {
+  if (!Array.isArray(raw)) return { error: "Invitations must be a list of people" };
+  const ids = [...new Set(raw.map(String))];
+  if (ids.some((id) => !validId(id))) return { error: "That isn't a person you can invite" };
+  if (!ids.length) return { ids };
+  const friendships = await Friendship.find({
+    status: "accepted",
+    $or: [{ requester: hostId, addressee: { $in: ids } }, { addressee: hostId, requester: { $in: ids } }],
+  });
+  const friendIds = new Set(friendships.map((f) => (String(f.requester) === String(hostId) ? String(f.addressee) : String(f.requester))));
+  const blocked = await blockedUserIds(hostId);
+  if (ids.some((id) => !friendIds.has(id) || blocked.has(id))) return { error: "You can only invite your friends" };
+  return { ids };
+}
+
+// Tells the people invited to a private live (and only them; the host's other friends aren't told it exists). A failure here must never stop the live.
+async function notifyInvitees(session, hostId, ids) {
+  try {
+    if (!ids.length) return;
+    await Notification.insertMany(ids.map((recipient) => ({ recipient, type: "live_invite", payload: { actorId: String(hostId), liveId: String(session._id), title: session.title } })));
+  } catch (err) {
+    console.error("Couldn't notify people invited to a live:", err.message);
+  }
+}
 const listenerRow = (sessionId, userId) => LiveListener.findOne({ session: sessionId, user: userId, expireAt: { $gt: new Date() } });
 
 // WebRTC needs to know which STUN/TURN servers to try. Defaults to free public STUN, which
@@ -273,6 +310,7 @@ liveRouter.get("/", async (req, res) => {
   const visible = sessions.filter((s) => {
     const host = hostById.get(String(s.host));
     if (!host || blocked.has(String(host._id))) return false;
+    if (!mayEnter(s, req.user.id)) return false;
     return !host.isPrivate || String(host._id) === req.user.id || friendIds.has(String(host._id));
   });
   res.json({
@@ -286,6 +324,16 @@ liveRouter.post("/", requireVerifiedEmail, async (req, res) => {
   const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
   if (!title) return res.status(400).json({ error: "Give your live a title" });
   if (title.length > 80) return res.status(400).json({ error: "Titles can be up to 80 characters" });
+  if (req.body?.private !== undefined && typeof req.body.private !== "boolean") return res.status(400).json({ error: "private must be true or false" });
+  const makePrivate = req.body?.private === true;
+  let invited = [];
+  if (req.body?.invite !== undefined) {
+    if (!makePrivate) return res.status(400).json({ error: "Only an invite-only live has invitations" });
+    const checked = await checkInvitees(req.user.id, req.body.invite);
+    if (checked.error) return res.status(400).json({ error: checked.error });
+    if (checked.ids.length > MAX_INVITED) return res.status(400).json({ error: `You can invite up to ${MAX_INVITED} people` });
+    invited = checked.ids;
+  }
   if (!(await startLimiter.allow(req.user.id))) {
     res.set("Retry-After", String(startLimiter.windowSeconds));
     return res.status(429).json({ error: "You've started a lot of lives — try again later." });
@@ -300,6 +348,8 @@ liveRouter.post("/", requireVerifiedEmail, async (req, res) => {
     lastHeartbeat: new Date(),
     mode: sfu ? "sfu" : "mesh",
     capacity: sfu ? sfuMaxListeners() : MAX_LISTENERS,
+    private: makePrivate,
+    invited,
   });
   if (sfu) {
     try {
@@ -311,7 +361,8 @@ liveRouter.post("/", requireVerifiedEmail, async (req, res) => {
     }
   }
   const host = await User.findById(req.user.id);
-  await notifyFriendsOfLive(session, req.user.id);
+  if (makePrivate) await notifyInvitees(session, req.user.id, invited);
+  else await notifyFriendsOfLive(session, req.user.id);
   await closePlan(req.body?.scheduledId, session, req.user.id);
   res.status(201).json({ live: await serializeSession(session, host, req.user.id) });
 });
@@ -378,6 +429,79 @@ liveRouter.post("/:id/end", async (req, res) => {
   const session = await LiveSession.findOne({ _id: req.params.id, host: req.user.id });
   if (!session) return res.status(404).json({ error: "Live not found" });
   await endSession(session);
+  res.status(204).end();
+});
+
+// ---- Invitations to an invite-only live (the host's) ---------------------------------------------------
+const hostedLive = async (req, res) => {
+  const session = validId(req.params.id) ? await LiveSession.findOne({ _id: req.params.id, host: req.user.id }) : null;
+  if (!session) {
+    res.status(404).json({ error: "Live not found" });
+    return null;
+  }
+  if (!session.private) {
+    res.status(400).json({ error: "This live isn't invite-only" });
+    return null;
+  }
+  return session;
+};
+
+async function invitationList(session) {
+  const users = await User.find({ _id: { $in: session.invited } });
+  const byId = new Map(users.map((u) => [String(u._id), u]));
+  const here = new Set((await LiveListener.find({ session: session._id, user: { $in: session.invited }, lastSeen: { $gt: listenerCutoff(session) }, expireAt: { $gt: new Date() } }).select("user")).map((r) => String(r.user)));
+  const invited = [];
+  for (const id of session.invited) {
+    const user = byId.get(String(id));
+    if (user) invited.push({ user: await toPublicUser(user), present: here.has(String(id)) });
+  }
+  return { invited, max: MAX_INVITED };
+}
+
+liveRouter.get("/:id/invites", async (req, res) => {
+  const session = await hostedLive(req, res);
+  if (!session) return;
+  res.json(await invitationList(session));
+});
+
+// Invite more people (friends only) while the live is on; they are told, and can then see and join it.
+liveRouter.post("/:id/invites", async (req, res) => {
+  const session = await hostedLive(req, res);
+  if (!session) return;
+  if (!isLive(session)) return res.status(409).json({ error: "This live has ended" });
+  const checked = await checkInvitees(req.user.id, req.body?.userIds);
+  if (checked.error) return res.status(400).json({ error: checked.error });
+  const have = new Set(session.invited.map(String));
+  const fresh = checked.ids.filter((id) => !have.has(id));
+  if (have.size + fresh.length > MAX_INVITED) return res.status(400).json({ error: `You can invite up to ${MAX_INVITED} people` });
+  if (fresh.length && !(await inviteLimiter.allow(req.user.id))) {
+    res.set("Retry-After", String(inviteLimiter.windowSeconds));
+    return res.status(429).json({ error: "You've sent a lot of invitations — try again later." });
+  }
+  if (fresh.length) {
+    const updated = await LiveSession.findOneAndUpdate({ _id: session._id }, { $addToSet: { invited: { $each: fresh } } }, { returnDocument: "after" });
+    await notifyInvitees(updated, req.user.id, fresh);
+    return res.status(201).json(await invitationList(updated));
+  }
+  res.status(201).json(await invitationList(session));
+});
+
+// Take an invitation back: they can no longer see the live, and if they are in it they are removed (from the media room too).
+liveRouter.delete("/:id/invites/:userId", async (req, res) => {
+  const session = await hostedLive(req, res);
+  if (!session) return;
+  if (!validId(req.params.userId)) return res.status(404).json({ error: "That person isn't invited" });
+  const userId = req.params.userId;
+  if (!session.invited.some((id) => String(id) === userId)) return res.status(404).json({ error: "That person isn't invited" });
+  await LiveSession.updateOne({ _id: session._id }, { $pull: { invited: userId } });
+  memberCache.clear();
+  stageCache.clear();
+  await Promise.all([
+    LiveListener.deleteOne({ session: session._id, user: userId }),
+    LiveSignal.deleteMany({ session: session._id, $or: [{ from: userId }, { to: userId }] }),
+    Notification.deleteMany({ type: "live_invite", recipient: userId, "payload.liveId": String(session._id) }),
+    session.mode === "sfu" ? removeSfuParticipant(String(session._id), userId) : null,
+  ]);
   res.status(204).end();
 });
 

@@ -190,6 +190,8 @@ export async function deleteAccount(userId) {
     LiveComment.deleteMany({ $or: [{ session: { $in: hosted } }, { user: id }] }),
   ]);
   await LiveSession.deleteMany({ host: id });
+  // their name on other people's invitation lists
+  await LiveSession.updateMany({ invited: id }, { $pull: { invited: id } });
   // Lives they planned (and the announcements of them), and their requests to be reminded of other people's.
   await ScheduledLive.deleteMany({ host: id });
   await ScheduledLive.updateMany({ reminders: id }, { $pull: { reminders: id } });

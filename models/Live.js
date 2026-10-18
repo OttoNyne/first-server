@@ -14,6 +14,9 @@ const liveSessionSchema = new mongoose.Schema(
     // Fixed when the live starts, so changing the server's settings never disturbs a live in progress.
     mode: { type: String, enum: ["mesh", "sfu"], default: "mesh" },
     capacity: { type: Number, default: 8 },
+    // An invite-only live: shown and open only to the host and the friends they invited (see routes/live.routes.js).
+    private: { type: Boolean, default: false },
+    invited: { type: [{ type: ObjectId, ref: "User" }], default: [] },
     lastHeartbeat: { type: Date, required: true },
     endedAt: { type: Date, default: null },
     expireAt: { type: Date, expires: 0 },
