@@ -122,6 +122,8 @@ export function describePush(n, actor, recipient) {
     case "critique_note":
     case "critique_thanks":
       return { body: say(n.type), url: p.critiqueId ? `/critiques/${id(p.critiqueId)}` : "/critiques" };
+    case "chain_done":
+      return { body: say("chain_done"), url: p.chainId ? `/chains/${id(p.chainId)}` : "/chains" };
     case "project_message":
       return { body: say("project_message"), url: p.projectId ? `/projects/${id(p.projectId)}` : "/projects", tag: `project-${id(p.projectId)}` };
     case "call_match":

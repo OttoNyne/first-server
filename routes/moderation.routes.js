@@ -15,6 +15,8 @@ import { Project } from "../models/Project.js";
 import { ProjectMessage } from "../models/ProjectMessage.js";
 import { Critique } from "../models/Critique.js";
 import { CritiqueNote } from "../models/CritiqueNote.js";
+import { Chain } from "../models/Chain.js";
+import { ChainSection } from "../models/ChainSection.js";
 
 export const moderationRouter = Router();
 moderationRouter.use(requireAuth);
@@ -54,7 +56,7 @@ moderationRouter.delete("/users/:username/block", async (req, res) => {
   res.status(204).end();
 });
 
-const REPORT_TARGET_TYPES = ["user", "post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment", "event", "blogComment", "piece", "processStep", "call", "callApplication", "projectMessage", "critique", "critiqueNote"];
+const REPORT_TARGET_TYPES = ["user", "post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment", "event", "blogComment", "piece", "processStep", "call", "callApplication", "projectMessage", "critique", "critiqueNote", "chainSection"];
 
 const reportLimiter = createLimiter({ name: "report", limit: 30, windowMs: 60 * 60 * 1000 });
 
@@ -81,6 +83,14 @@ moderationRouter.post("/reports", async (req, res) => {
     const note = await CritiqueNote.findById(targetId).select("critique");
     const request = note ? await Critique.findOne({ _id: note.critique, owner: req.user.id }).select("_id") : null;
     if (!request) return res.status(404).json({ error: "That doesn't exist any more" });
+  }
+  // a part of a chain can be reported by whoever can see it: anyone once the chain is finished, and before that only the person about to draw the
+  // next part (who is shown the strip along the bottom of it)
+  if (targetType === "chainSection") {
+    const part = await ChainSection.findById(targetId).select("chain index");
+    const chain = part ? await Chain.findById(part.chain) : null;
+    const seen = chain && (chain.status === "complete" || (String(chain.claimUser) === req.user.id && chain.claimUntil > new Date() && part.index === chain.count - 1));
+    if (!seen) return res.status(404).json({ error: "That doesn't exist any more" });
   }
   // Only things that exist can be reported, so the queue doesn't fill with references to nothing.
   if (!(await loadTarget(targetType, targetId, req.user.id)).exists) return res.status(404).json({ error: "That doesn't exist any more" });

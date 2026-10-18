@@ -27,8 +27,11 @@ import { toPublicUser } from "../utils/serialize.js";
 import { releasePictures } from "./commentPictures.js";
 import { isAdminUser } from "../utils/admin.js";
 import { ABOUT_FIELDS } from "../utils/about.js";
+import { Chain } from "../models/Chain.js";
+import { ChainSection } from "../models/ChainSection.js";
+import { deleteChain } from "./chains.js";
 
-export const CONTENT_TYPES = ["post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment", "event", "blogComment", "piece", "processStep", "call", "callApplication", "projectMessage", "critique", "critiqueNote"];
+export const CONTENT_TYPES = ["post", "comment", "profileComment", "blogEntry", "bulletin", "groupTopic", "groupReply", "mediaComment", "event", "blogComment", "piece", "processStep", "call", "callApplication", "projectMessage", "critique", "critiqueNote", "chainSection"];
 export const REPORT_TYPES = ["user", ...CONTENT_TYPES];
 const PREVIEW_CHARS = 600;
 const clip = (text) => (typeof text === "string" && text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS)}…` : (text ?? ""));
@@ -95,6 +98,13 @@ export async function loadTarget(type, id, viewerId) {
     case "critiqueNote": {
       const n = await CritiqueNote.findById(id).populate("author");
       return n ? shape(n.author, { text: clip([n.working && `What is working: ${n.working}`, n.change && `What I would change: ${n.change}`].filter(Boolean).join("\n")), link: `/critiques/${n.critique}` }) : { exists: false, authorId: null };
+    }
+    case "chainSection": {
+      const part = await ChainSection.findById(id).populate("author");
+      const chain = part ? await Chain.findById(part.chain) : null;
+      return part && chain
+        ? shape(part.author, { title: chain.prompt || null, text: clip("Part " + (part.index + 1) + " of " + (chain.status === "complete" ? "a finished chain" : "a chain still being drawn")), image: "/api/chains/" + chain._id + "/sections/" + part.index + "/image", link: "/chains/" + chain._id })
+        : { exists: false, authorId: null };
     }
     case "projectMessage": {
       const m = await ProjectMessage.findById(id).populate("author");
@@ -192,6 +202,13 @@ export async function removeContent(type, id) {
     }
     case "critiqueNote":
       return (await CritiqueNote.findByIdAndDelete(id)) !== null;
+    // a part can't be taken out of a chain and leave it whole, so the whole chain goes
+    case "chainSection": {
+      const part = await ChainSection.findById(id).select("chain");
+      if (!part) return false;
+      await deleteChain(part.chain);
+      return true;
+    }
     case "projectMessage": {
       const message = await ProjectMessage.findByIdAndDelete(id);
       if (message) await releasePictures([message]);
@@ -213,7 +230,7 @@ export async function removeContent(type, id) {
   return false;
 }
 
-const WHAT = { post: "post", comment: "comment", profileComment: "testimonial", mediaComment: "comment on a portfolio piece", blogComment: "comment on a blog entry", event: "event", blogEntry: "blog entry", bulletin: "bulletin", groupTopic: "group topic", groupReply: "group reply", piece: "portfolio piece", processStep: "step of a portfolio piece", call: "open call", callApplication: "answer to an open call", projectMessage: "message in a project room", critique: "request for feedback", critiqueNote: "feedback on a piece" };
+const WHAT = { post: "post", comment: "comment", profileComment: "testimonial", mediaComment: "comment on a portfolio piece", blogComment: "comment on a blog entry", event: "event", blogEntry: "blog entry", bulletin: "bulletin", groupTopic: "group topic", groupReply: "group reply", piece: "portfolio piece", processStep: "step of a portfolio piece", call: "open call", callApplication: "answer to an open call", projectMessage: "message in a project room", critique: "request for feedback", critiqueNote: "feedback on a piece", chainSection: "drawing in a chain" };
 
 export async function suspendUser(userId, note) {
   await User.updateOne({ _id: userId }, { $set: { suspendedAt: new Date(), suspensionNote: note ?? "" } });

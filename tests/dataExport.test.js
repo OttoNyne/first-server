@@ -236,7 +236,7 @@ describe("download my data", () => {
     expect(data.workRequests).toEqual({ youSent: [], youAnswered: [] });
     expect(data.following).toEqual([]);
     expect(data.saved).toEqual({ posts: [], pieces: [] });
-    expect(data.portfolio).toEqual({ albums: [], pieces: [], creditsYouGave: [], creditsYouAccepted: [], challengeEntries: [], commentsYouWrote: [] });
+    expect(data.portfolio).toEqual({ albums: [], pieces: [], creditsYouGave: [], creditsYouAccepted: [], chainParts: [], challengeEntries: [], commentsYouWrote: [] });
     expect(data.people).toEqual({ friends: [], requestsYouSent: [], topFriends: [], blocked: [] });
     expect(data.account.twoStepSignInOn).toBe(false);
   });

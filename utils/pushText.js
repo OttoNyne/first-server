@@ -50,6 +50,7 @@ const TEXT = {
   scheduled_post_failed: { en: () => "Your scheduled post couldn't be published", es: () => "No se pudo publicar tu publicación programada", ar: () => "تعذّر نشر منشورك المجدول" },
   critique_note: { en: ({ who }) => `${who} gave you feedback on a piece`, es: ({ who }) => `${who} te dio su opinión sobre una obra`, ar: ({ who }) => `${who} قدّم لك ملاحظات على أحد أعمالك` },
   critique_thanks: { en: ({ who }) => `${who} thanked you for your feedback`, es: ({ who }) => `${who} te agradeció tu opinión`, ar: ({ who }) => `${who} شكرك على ملاحظاتك` },
+  chain_done: { en: () => "A chain you drew a part of is finished: come and see the whole drawing", es: () => "Una cadena en la que dibujaste una parte está terminada: ven a ver el dibujo completo", ar: () => "اكتملت سلسلة رسمتَ جزءًا منها: تعالَ وشاهد الرسمة كاملة" },
   project_message: { en: ({ who }) => `${who} wrote in your project room`, es: ({ who }) => `${who} escribió en tu sala de proyecto`, ar: ({ who }) => `${who} كتب في غرفة مشروعك` },
   call_match: { en: ({ who }) => `${who} posted an open call that fits what you offer`, es: ({ who }) => `${who} publicó una convocatoria que encaja con lo que ofreces`, ar: ({ who }) => `${who} نشر دعوة مفتوحة تناسب ما تقدمه` },
   call_application: { en: ({ who }) => `${who} applied to your open call`, es: ({ who }) => `${who} respondió a tu convocatoria`, ar: ({ who }) => `${who} تقدّم إلى دعوتك المفتوحة` },

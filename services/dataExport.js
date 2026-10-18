@@ -42,6 +42,8 @@ import { CritiqueNote } from "../models/CritiqueNote.js";
 import { Call } from "../models/Call.js";
 import { CallApplication } from "../models/CallApplication.js";
 import { ChallengeEntry } from "../models/ChallengeEntry.js";
+import { Chain } from "../models/Chain.js";
+import { ChainSection } from "../models/ChainSection.js";
 import { WorkRequest } from "../models/WorkRequest.js";
 
 // "Download my data": everything a person has written or chosen on the site, as one readable file.
@@ -100,6 +102,8 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
   const creditsGiven = await rows("creditsGiven", Credit.find({ owner: id }));
   const creditsAccepted = await rows("creditsAccepted", Credit.find({ person: id, status: "accepted" }));
   const challengeEntries = await rows("challengeEntries", ChallengeEntry.find({ user: id }));
+  const chainParts = await rows("chainParts", ChainSection.find({ author: id }).select("chain index createdAt"));
+  const chainsDrawn = new Map((await Chain.find({ _id: { $in: chainParts.map((p) => p.chain) } }).select("prompt status").lean()).map((c) => [String(c._id), c]));
   const followRows = await rows("following", Follow.find({ follower: id }));
   const stepRows = await rows("processSteps", ProcessStep.find({ owner: id }));
   const scheduledRows = await rows("scheduledPosts", ScheduledPost.find({ author: id }));
@@ -203,6 +207,7 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
       pieces: media.map((m) => ({ id: String(m._id), type: m.type, url: m.url, caption: text(m.caption), madeWithAi: Boolean(m.isAiImage), album: m.album ? String(m.album) : null, added: iso(m.createdAt) })),
       creditsYouGave: creditsGiven.map((c) => ({ onPiece: String(c.item), person: creditNames.get(String(c.person)) ?? null, role: text(c.role), accepted: c.status === "accepted", added: iso(c.createdAt) })),
       creditsYouAccepted: creditsAccepted.map((c) => ({ onPiece: String(c.item), pieceOf: creditNames.get(String(c.owner)) ?? null, role: text(c.role), added: iso(c.createdAt) })),
+      chainParts: chainParts.map((p) => ({ chain: String(p.chain), idea: text(chainsDrawn.get(String(p.chain))?.prompt), part: p.index + 1, finished: chainsDrawn.get(String(p.chain))?.status === "complete", drawn: iso(p.createdAt) })),
       challengeEntries: challengeEntries.map((e) => ({ week: e.week, piece: String(e.item), entered: iso(e.createdAt) })),
       commentsYouWrote: mediaComments.map((c) => ({ id: String(c._id), onPiece: String(c.item), text: text(c.content), pictureUrl: c.imageUrl ?? null, posted: iso(c.createdAt) })),
     },

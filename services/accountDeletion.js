@@ -35,6 +35,7 @@ import { deleteCritique } from "./removal.js";
 import { Call } from "../models/Call.js";
 import { CallApplication } from "../models/CallApplication.js";
 import { ChallengeEntry } from "../models/ChallengeEntry.js";
+import { removeChainsOf } from "./chains.js";
 import { WorkRequest } from "../models/WorkRequest.js";
 import { GroupTopic } from "../models/GroupTopic.js";
 import { GroupReply } from "../models/GroupReply.js";
@@ -148,6 +149,8 @@ export async function deleteAccount(userId) {
   await Mute.deleteMany({ $or: [{ user: id }, { muted: id }] });
   await PollVote.deleteMany({ $or: [{ user: id }, { post: { $in: postIds } }] });
   await ChallengeEntry.deleteMany({ user: id });
+  // chains: every one they drew a part of goes, whole, because a part can't be taken out and leave it standing
+  await removeChainsOf(id);
   await WorkRequest.deleteMany({ $or: [{ from: id }, { to: id }] });
   await MediaItem.deleteMany({ owner: id });
   await Album.deleteMany({ owner: id });
