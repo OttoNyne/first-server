@@ -8,6 +8,10 @@ import { toPublicUser } from "../utils/serialize.js";
 import { cleanBody } from "../utils/blogText.js";
 import { REPORT_TYPES, liftSuspension, loadTarget, resolveCase } from "../services/moderation.js";
 import { giveByAdmin, removeByAdmin } from "../services/csVerified.js";
+import { Spotlight } from "../models/Spotlight.js";
+import { MediaItem } from "../models/MediaItem.js";
+import { checkLine } from "../utils/profileFields.js";
+import { MAX_NOTE, SLOTS, adminSlots, hiddenReason } from "../services/spotlights.js";
 
 // The moderation review queue. Everything here is for administrators only (see middleware/requireAdmin.js) and answers 404 to anyone else.
 export const adminRouter = Router();
@@ -118,6 +122,48 @@ adminRouter.delete("/verified/:username", async (req, res) => {
   if (!user) return res.status(404).json({ error: "No one has that username" });
   if (!(await removeByAdmin(user))) return res.status(404).json({ error: "That person doesn't have a badge from an administrator" });
   await ModerationAction.create({ admin: req.user.id, targetType: "user", targetId: user._id, subject: user._id, action: "unverified", note: "", reportCount: 0 });
+  res.status(204).end();
+});
+
+// ---- The two artist spotlights on the main screen ------------------------------------------------------
+const slotOf = (req) => (SLOTS.includes(Number(req.params.slot)) ? Number(req.params.slot) : null);
+
+adminRouter.get("/spotlights", async (req, res) => {
+  res.json({ slots: await adminSlots(), maxNote: MAX_NOTE });
+});
+
+// Put a person in a slot (replacing whoever was there): `{ username, note?, pieceId? }`. They must be able to be shown (a public, unsuspended
+// profile) and can hold only one slot; `pieceId` must be one of their own pictures (leave it out for their featured piece, else their latest).
+adminRouter.put("/spotlights/:slot", async (req, res) => {
+  const slot = slotOf(req);
+  if (!slot) return res.status(404).json({ error: "That slot doesn't exist" });
+  const user = await findForBadge(req.body?.username ?? "");
+  if (!user) return res.status(404).json({ error: "No one has that username" });
+  if (user.suspendedAt) return res.status(400).json({ error: "That account is suspended" });
+  const reason = hiddenReason(user);
+  if (reason === "private") return res.status(400).json({ error: "That profile is private, so it can't be shown on the main screen" });
+  let note = "";
+  if (req.body?.note !== undefined && req.body.note !== null) {
+    const checked = checkLine(req.body.note, MAX_NOTE, "Spotlight note");
+    if (checked.error) return res.status(400).json({ error: checked.error });
+    note = checked.value;
+  }
+  let piece = null;
+  if (req.body?.pieceId !== undefined && req.body.pieceId !== null && req.body.pieceId !== "") {
+    const found = mongoose.isValidObjectId(req.body.pieceId) ? await MediaItem.findOne({ _id: req.body.pieceId, owner: user._id, type: "image" }) : null;
+    if (!found) return res.status(400).json({ error: "Pick one of their pictures, or leave it automatic" });
+    piece = found._id;
+  }
+  const other = SLOTS.find((s) => s !== slot);
+  if (await Spotlight.exists({ slot: other, user: user._id })) return res.status(409).json({ error: "That person is already in the other slot" });
+  await Spotlight.findOneAndUpdate({ slot }, { $set: { user: user._id, piece, note, setBy: req.user.id } }, { upsert: true, returnDocument: "after", setDefaultsOnInsert: true });
+  res.json({ slots: await adminSlots(), maxNote: MAX_NOTE });
+});
+
+adminRouter.delete("/spotlights/:slot", async (req, res) => {
+  const slot = slotOf(req);
+  if (!slot) return res.status(404).json({ error: "That slot doesn't exist" });
+  if (!(await Spotlight.findOneAndDelete({ slot }))) return res.status(404).json({ error: "That slot is empty" });
   res.status(204).end();
 });
 

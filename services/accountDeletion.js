@@ -36,6 +36,7 @@ import { Call } from "../models/Call.js";
 import { CallApplication } from "../models/CallApplication.js";
 import { ChallengeEntry } from "../models/ChallengeEntry.js";
 import { removeChainsOf } from "./chains.js";
+import { Spotlight } from "../models/Spotlight.js";
 import { WorkRequest } from "../models/WorkRequest.js";
 import { GroupTopic } from "../models/GroupTopic.js";
 import { GroupReply } from "../models/GroupReply.js";
@@ -151,6 +152,8 @@ export async function deleteAccount(userId) {
   await ChallengeEntry.deleteMany({ user: id });
   // chains: every one they drew a part of goes, whole, because a part can't be taken out and leave it standing
   await removeChainsOf(id);
+  // a spotlight on the main screen leaves its slot empty
+  await Spotlight.deleteMany({ user: id });
   await WorkRequest.deleteMany({ $or: [{ from: id }, { to: id }] });
   await MediaItem.deleteMany({ owner: id });
   await Album.deleteMany({ owner: id });
