@@ -13,7 +13,7 @@ import { createLimiter } from "../utils/rateLimit.js";
 import { deleteAccount } from "../services/accountDeletion.js";
 import { buildExport } from "../services/dataExport.js";
 import { WALLPAPER_MOTIONS, isWallpaperMotion } from "../utils/wallpaperMotion.js";
-import { MAX_LISTENING, MAX_MOOD, MAX_WORK_NOTE, checkLine, checkOffers, checkTags, isValidTag, normalizeTag } from "../utils/profileFields.js";
+import { MAX_HEADLINE, MAX_LISTENING, MAX_MOOD, MAX_WORK_NOTE, checkLine, checkOffers, checkTags, isValidTag, normalizeTag } from "../utils/profileFields.js";
 import { checkHidden, checkOrder } from "../utils/profileSections.js";
 import { areFriends, blockedUserIds, getProfileForViewer } from "../utils/visibility.js";
 import { Follow } from "../models/Follow.js";
@@ -82,12 +82,12 @@ profilesRouter.get("/tags", requireAuth, async (req, res) => {
 
 profilesRouter.patch("/me", requireAuth, async (req, res) => {
   const user = await User.findById(req.user.id);
-  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, mood, listeningTo, tags, sectionOrder, hiddenSections, showActivity, chatStatus, profileViews, showConnections, language, openToWork, workOffers, workNote, listInSearchEngines, allowEmbeds } = req.body;
+  const { displayName, bio, avatarUrl, wallpaperUrl, wallpaperType, wallpaperPosition, wallpaperMotion, isPrivate, theme, headline, mood, listeningTo, tags, sectionOrder, hiddenSections, showActivity, chatStatus, profileViews, showConnections, language, openToWork, workOffers, workNote, listInSearchEngines, allowEmbeds } = req.body;
   const fields = {};
   // the theme is checked before anything is changed, so a bad setting leaves the profile exactly as it was
   const themeChange = theme !== undefined ? checkTheme(theme) : null;
   if (themeChange?.error) return res.status(400).json({ error: themeChange.error });
-  for (const [name, value, max, label] of [["mood", mood, MAX_MOOD, "Mood"], ["listeningTo", listeningTo, MAX_LISTENING, "Listening to"]]) {
+  for (const [name, value, max, label] of [["headline", headline, MAX_HEADLINE, "Headline"], ["mood", mood, MAX_MOOD, "Mood"], ["listeningTo", listeningTo, MAX_LISTENING, "Listening to"]]) {
     if (value === undefined) continue;
     const checked = checkLine(value, max, label);
     if (checked.error) return res.status(400).json({ error: checked.error });

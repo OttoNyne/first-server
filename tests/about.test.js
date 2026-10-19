@@ -227,7 +227,7 @@ describe("About me", () => {
   describe("sections, reports and deletion", () => {
     it("is a section of the profile, first by default, that can be moved and hidden like the others", async () => {
       const alice = await signup(app, "alice");
-      expect(alice.user.sectionOrder[0]).toBe("about");
+      expect(alice.user.sectionOrder).toEqual(["portfolio", "about", "testimonials", "blog", "friends", "music"]);
       const order = ["friends", "music", "portfolio", "blog", "testimonials", "about"];
       const res = await alice.agent.patch("/api/profiles/me").send({ sectionOrder: order, hiddenSections: ["about"] });
       expect(res.status).toBe(200);

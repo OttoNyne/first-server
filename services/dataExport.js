@@ -165,6 +165,7 @@ export async function buildExport(userId, { max = MAX_PER_SECTION, now = new Dat
       emailVerified: Boolean(user.emailVerified),
       joined: iso(user.createdAt),
       bio: user.bio ?? "",
+      headline: user.headline ?? "",
       mood: user.mood ?? "",
       listeningTo: user.listeningTo ?? "",
       tags: user.tags ?? [],

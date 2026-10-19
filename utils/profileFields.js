@@ -1,5 +1,6 @@
-// Cleaning for the small free-text fields on a profile: a mood, what someone is listening to, and tags.
+// Cleaning for the small free-text fields on a profile: a headline, a mood, what someone is listening to, and tags.
 
+export const MAX_HEADLINE = 80;
 export const MAX_MOOD = 60;
 export const MAX_LISTENING = 80;
 export const MAX_TAGS = 8;

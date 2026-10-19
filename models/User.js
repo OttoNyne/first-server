@@ -19,6 +19,8 @@ const userSchema = new mongoose.Schema(
     wallpaperPosition: { type: String, default: "50% 50%" },
     // How a picture wallpaper moves (see utils/wallpaperMotion.js).
     wallpaperMotion: { type: String, enum: WALLPAPER_MOTIONS, default: "none" },
+    // A headline: one line under the name saying what they do ("Illustrator · open to commissions").
+    headline: { type: String, default: "", maxlength: 80 },
     // A short status line, what they are listening to, and what they do (up to 8 lowercase tags, used to browse for people).
     mood: { type: String, default: "", maxlength: 60 },
     listeningTo: { type: String, default: "", maxlength: 80 },
@@ -169,6 +171,7 @@ userSchema.methods.toPublic = function ({ includeEmail = false } = {}) {
     wallpaperType: this.wallpaperType,
     wallpaperPosition: this.wallpaperPosition,
     wallpaperMotion: this.wallpaperMotion ?? "none",
+    headline: this.headline ?? "",
     mood: this.mood ?? "",
     listeningTo: this.listeningTo ?? "",
     tags: this.tags ?? [],

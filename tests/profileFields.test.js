@@ -245,3 +245,69 @@ describe("mood, what someone is listening to, and tags", () => {
     });
   });
 });
+
+describe("the headline under a person's name", () => {
+  let app;
+  beforeAll(async () => {
+    await connectTestDb();
+    ({ app } = await import("../app.js"));
+  });
+  beforeEach(clearTestDb);
+  afterAll(async () => {
+    await clearTestDb();
+    await disconnectTestDb();
+  });
+
+  const save = (who, body) => who.agent.patch("/api/profiles/me").send(body);
+
+  it("starts empty, can be set, is shown to anyone, and can be changed or cleared", async () => {
+    const alice = await signup(app, "alice");
+    const bob = await signup(app, "bob");
+    expect(alice.user.headline).toBe("");
+    const res = await save(alice, { headline: "  Illustrator · open to   commissions " });
+    expect(res.status).toBe(200);
+    expect(res.body.user.headline).toBe("Illustrator · open to commissions");
+    expect((await bob.agent.get("/api/profiles/alice")).body.user.headline).toBe("Illustrator · open to commissions");
+    await save(alice, { headline: "" });
+    expect((await bob.agent.get("/api/profiles/alice")).body.user.headline).toBe("");
+  });
+
+  it("is left alone when something else is saved, and can be 80 characters but not 81", async () => {
+    const alice = await signup(app, "alice");
+    await save(alice, { headline: "Sound designer" });
+    expect((await save(alice, { mood: "calm" })).body.user.headline).toBe("Sound designer");
+    expect((await save(alice, { headline: "x".repeat(80) })).status).toBe(200);
+    const tooLong = await save(alice, { headline: "x".repeat(81) });
+    expect(tooLong.status).toBe(400);
+    expect(tooLong.body.error).toBe("Headline can be up to 80 characters");
+    expect((await alice.agent.get("/api/profiles/alice")).body.user.headline).toBe("x".repeat(80));
+  });
+
+  it("is refused when it isn't text, and keeps markup as plain text, one line", async () => {
+    const alice = await signup(app, "alice");
+    for (const bad of [5, null, { $ne: "" }, ["a"]]) {
+      const res = await save(alice, { headline: bad });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("Headline must be text");
+    }
+    const res = await save(alice, { headline: "<b>Painter</b>\n& muralist" });
+    expect(res.body.user.headline).toBe("<b>Painter</b> & muralist");
+  });
+
+  it("is in the data download", async () => {
+    const alice = await signup(app, "alice");
+    await save(alice, { headline: "Illustrator" });
+    const data = (await alice.agent.post("/api/profiles/me/export").send({ password: "password123" })).body;
+    expect(data.account.headline).toBe("Illustrator");
+  });
+});
+
+describe("the order a new profile starts in", () => {
+  it("leads with the work, then who they are and what others say, and the rest after", async () => {
+    const { SECTION_KEYS, completeOrder } = await import("../utils/profileSections.js");
+    expect(SECTION_KEYS).toEqual(["portfolio", "about", "testimonials", "blog", "friends", "music"]);
+    expect(completeOrder(undefined)).toEqual(SECTION_KEYS);
+    // an order someone chose is kept, with anything it doesn't mention following in the usual order
+    expect(completeOrder(["music", "blog"])).toEqual(["music", "blog", "portfolio", "about", "testimonials", "friends"]);
+  });
+});

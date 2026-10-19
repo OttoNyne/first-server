@@ -38,7 +38,7 @@ const SENTENCE = {
   es: (name) => `${name} está en CreativesSelect: portafolio, música y más.`,
   ar: (name) => `${name} على CreativesSelect: معرض أعمال وموسيقى والمزيد.`,
 };
-const GENERIC = "A home for creatives: customizable profiles, friends, groups, AI-assisted posts, and a Help wanted board.";
+const GENERIC = "The professional network for creatives: portfolio-first profiles, open calls and requests for work, collaborations and recommendations.";
 
 /** The page: tags for programs that make previews, and a way on to the real profile for people. Everything put in is escaped by this function. */
 export function previewPage({ title, description, image, url, target, index, lang = "en", type = "website" }) {
